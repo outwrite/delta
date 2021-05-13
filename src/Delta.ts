@@ -576,7 +576,7 @@ class Delta {
 
           // Only add the one that is getting added....
           if (
-            thisOp.attributes?.detectionId &&
+            typeof thisOp.attributes?.detectionId !== 'undefined' &&
             !transformedAttrs?.detectionId
           ) {
             if (!thisAttributeMarker[thisOp.attributes.detectionId]) {
@@ -588,8 +588,20 @@ class Delta {
               delta.length(),
               false,
             ]);
+
+            if (otherOp.attributes?.detectionId) {
+              if (!otherAttributeMarker[otherOp.attributes.detectionId]) {
+                otherAttributeMarker[otherOp.attributes.detectionId] = [];
+              }
+              otherAttributeMarker[otherOp.attributes.detectionId].push([
+                runningCursor,
+                runningCursor + length,
+                null,
+                false,
+              ]);
+            }
           } else if (
-            otherOp.attributes?.detectionId &&
+            typeof otherOp.attributes?.detectionId !== 'undefined' &&
             otherOp.attributes.detectionId === transformedAttrs?.detectionId
           ) {
             if (!otherAttributeMarker[otherOp.attributes.detectionId]) {
@@ -601,6 +613,18 @@ class Delta {
               delta.length(),
               false,
             ]);
+
+            if (thisOp.attributes?.detectionId) {
+              if (!thisAttributeMarker[thisOp.attributes.detectionId]) {
+                thisAttributeMarker[thisOp.attributes.detectionId] = [];
+              }
+              thisAttributeMarker[thisOp.attributes.detectionId].push([
+                runningCursor,
+                runningCursor + length,
+                null,
+                false,
+              ]);
+            }
           }
 
           // We retain either their retain or insert
