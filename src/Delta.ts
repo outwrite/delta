@@ -112,11 +112,6 @@ class Delta {
     return this;
   }
 
-  pop(): Op | undefined {
-    const op = this.ops.pop();
-    return op;
-  }
-
   chop(): this {
     const lastOp = this.ops[this.ops.length - 1];
     if (lastOp && lastOp.retain && !lastOp.attributes) {
