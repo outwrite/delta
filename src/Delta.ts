@@ -6,6 +6,13 @@ import Op from './Op';
 
 const NULL_CHARACTER = String.fromCharCode(0); // Placeholder char for embed in diff()
 
+interface AttributeMarker {
+  start: number;
+  end: number;
+  opLength: number | null;
+  thisOrOther: boolean;
+}
+
 class Delta {
   static Op = Op;
   static AttributeMap = AttributeMap;
@@ -186,6 +193,9 @@ class Delta {
   compose(other: Delta): Delta {
     const thisIter = Op.iterator(this.ops);
     const otherIter = Op.iterator(other.ops);
+
+    let runningCursor = 0;
+    const attributeMarker: { [id: string]: Array<AttributeMarker> } = {};
     const ops = [];
     const firstOther = otherIter.peek();
     if (
@@ -198,8 +208,22 @@ class Delta {
         thisIter.peekType() === 'insert' &&
         thisIter.peekLength() <= firstLeft
       ) {
-        firstLeft -= thisIter.peekLength();
-        ops.push(thisIter.next());
+        const length = thisIter.peekLength();
+        firstLeft -= length;
+        const op = thisIter.next();
+        if (op.attributes?.detectionId) {
+          if (!attributeMarker[op.attributes.detectionId]) {
+            attributeMarker[op.attributes.detectionId] = [];
+          }
+          attributeMarker[op.attributes.detectionId].push({
+            start: runningCursor,
+            end: runningCursor + length,
+            opLength: runningCursor,
+            thisOrOther: true,
+          });
+        }
+        ops.push(op);
+        runningCursor += length;
       }
       if (firstOther.retain - firstLeft > 0) {
         otherIter.next(firstOther.retain - firstLeft);
@@ -208,8 +232,22 @@ class Delta {
     const delta = new Delta(ops);
     while (thisIter.hasNext() || otherIter.hasNext()) {
       if (otherIter.peekType() === 'insert') {
-        delta.push(otherIter.next());
+        const op = otherIter.next();
+        if (op.attributes?.detectionId) {
+          if (!attributeMarker[op.attributes.detectionId]) {
+            attributeMarker[op.attributes.detectionId] = [];
+          }
+          attributeMarker[op.attributes.detectionId].push({
+            start: runningCursor,
+            end: runningCursor + Op.length(op),
+            opLength: delta.length(),
+            thisOrOther: false,
+          });
+        }
+        delta.push(op);
+        runningCursor += Op.length(op);
       } else if (thisIter.peekType() === 'delete') {
+        runningCursor -= thisIter.peekLength();
         delta.push(thisIter.next());
       } else {
         const length = Math.min(thisIter.peekLength(), otherIter.peekLength());
@@ -231,13 +269,39 @@ class Delta {
           if (attributes) {
             newOp.attributes = attributes;
           }
+          if (attributes?.detectionId) {
+            if (!attributeMarker[attributes.detectionId]) {
+              attributeMarker[attributes.detectionId] = [];
+            }
+            attributeMarker[attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: delta.length(),
+              thisOrOther:
+                thisOp.attributes?.detection === attributes.detectionId,
+            });
+          } else if (
+            thisOp.attributes?.detectionId &&
+            otherOp.attributes === null
+          ) {
+            attributeMarker[thisOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: null,
+              thisOrOther: true,
+            });
+          }
+
           delta.push(newOp);
+
+          runningCursor += length;
 
           // Optimization if rest of other is just retain
           if (
             !otherIter.hasNext() &&
             isEqual(delta.ops[delta.ops.length - 1], newOp)
           ) {
+            // TODO: handle invalid attributes using attribute marker
             const rest = new Delta(thisIter.rest());
             return delta.concat(rest).chop();
           }
@@ -248,10 +312,36 @@ class Delta {
           typeof otherOp.delete === 'number' &&
           typeof thisOp.retain === 'number'
         ) {
+          if (thisOp.attributes?.detectionId) {
+            if (!attributeMarker[thisOp.attributes.detectionId]) {
+              attributeMarker[thisOp.attributes.detectionId] = [];
+            }
+            attributeMarker[thisOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: null,
+              thisOrOther: true,
+            });
+          }
           delta.push(otherOp);
+          runningCursor -= length;
+        } else {
+          if (thisOp.attributes?.detectionId) {
+            if (!attributeMarker[thisOp.attributes.detectionId]) {
+              attributeMarker[thisOp.attributes.detectionId] = [];
+            }
+            attributeMarker[thisOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: null,
+              thisOrOther: true,
+            });
+          }
         }
       }
     }
+
+    // TODO: handle invalid attributes using attribute marker
     return delta.chop();
   }
 
