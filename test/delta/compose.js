@@ -1,38 +1,38 @@
-var Delta = require('../../dist/Delta');
+const Delta = require('../../dist/Delta');
 
 describe('compose()', function () {
   it('insert + insert', function () {
-    var a = new Delta().insert('A');
-    var b = new Delta().insert('B');
-    var expected = new Delta().insert('B').insert('A');
+    const a = new Delta().insert('A');
+    const b = new Delta().insert('B');
+    const expected = new Delta().insert('B').insert('A');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert + insert (detectionId)', function () {
-    var a = new Delta().insert('A', { detectionId: '123' });
-    var b = new Delta().insert('B', { detectionId: '234' });
-    var expected = new Delta()
+    const a = new Delta().insert('A', { detectionId: '123' });
+    const b = new Delta().insert('B', { detectionId: '234' });
+    const expected = new Delta()
       .insert('B', { detectionId: '234' })
       .insert('A', { detectionId: '123' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert + retain', function () {
-    var a = new Delta().insert('A');
-    var b = new Delta().retain(1, { bold: true, color: 'red', font: null });
-    var expected = new Delta().insert('A', { bold: true, color: 'red' });
+    const a = new Delta().insert('A');
+    const b = new Delta().retain(1, { bold: true, color: 'red', font: null });
+    const expected = new Delta().insert('A', { bold: true, color: 'red' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert + retain (detectionId)', function () {
-    var a = new Delta().insert('A');
-    var b = new Delta().retain(1, {
+    const a = new Delta().insert('A');
+    const b = new Delta().retain(1, {
       bold: true,
       color: 'red',
       font: null,
       detectionId: '123',
     });
-    var expected = new Delta().insert('A', {
+    const expected = new Delta().insert('A', {
       bold: true,
       color: 'red',
       detectionId: '123',
@@ -41,89 +41,89 @@ describe('compose()', function () {
   });
 
   it('insert + delete', function () {
-    var a = new Delta().insert('A');
-    var b = new Delta().delete(1);
-    var expected = new Delta();
+    const a = new Delta().insert('A');
+    const b = new Delta().delete(1);
+    const expected = new Delta();
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert + delete (detectionId)', function () {
-    var a = new Delta().insert('A', { detectionId: '123' });
-    var b = new Delta().delete(1);
-    var expected = new Delta();
+    const a = new Delta().insert('A', { detectionId: '123' });
+    const b = new Delta().delete(1);
+    const expected = new Delta();
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert + delete (detectionId) - clears detection', function () {
-    var a = new Delta().insert('AB', { detectionId: '123' });
-    var b = new Delta().delete(1);
-    var expected = new Delta().insert('B');
+    const a = new Delta().insert('AB', { detectionId: '123' });
+    const b = new Delta().delete(1);
+    const expected = new Delta().insert('B');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete + insert', function () {
-    var a = new Delta().delete(1);
-    var b = new Delta().insert('B');
-    var expected = new Delta().insert('B').delete(1);
+    const a = new Delta().delete(1);
+    const b = new Delta().insert('B');
+    const expected = new Delta().insert('B').delete(1);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete + insert (detectionId)', function () {
-    var a = new Delta().delete(1);
-    var b = new Delta().insert('B', { detectionId: '123' });
-    var expected = new Delta().insert('B', { detectionId: '123' }).delete(1);
+    const a = new Delta().delete(1);
+    const b = new Delta().insert('B', { detectionId: '123' });
+    const expected = new Delta().insert('B', { detectionId: '123' }).delete(1);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete + retain', function () {
-    var a = new Delta().delete(1);
-    var b = new Delta().retain(1, { bold: true, color: 'red' });
-    var expected = new Delta()
+    const a = new Delta().delete(1);
+    const b = new Delta().retain(1, { bold: true, color: 'red' });
+    const expected = new Delta()
       .delete(1)
       .retain(1, { bold: true, color: 'red' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete + retain (detectionId)', function () {
-    var a = new Delta().delete(1);
-    var b = new Delta().retain(1, {
+    const a = new Delta().delete(1);
+    const b = new Delta().retain(1, {
       bold: true,
       color: 'red',
       detectionId: '123',
     });
-    var expected = new Delta()
+    const expected = new Delta()
       .delete(1)
       .retain(1, { bold: true, color: 'red', detectionId: '123' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete + delete', function () {
-    var a = new Delta().delete(1);
-    var b = new Delta().delete(1);
-    var expected = new Delta().delete(2);
+    const a = new Delta().delete(1);
+    const b = new Delta().delete(1);
+    const expected = new Delta().delete(2);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain + insert', function () {
-    var a = new Delta().retain(1, { color: 'blue' });
-    var b = new Delta().insert('B');
-    var expected = new Delta().insert('B').retain(1, { color: 'blue' });
+    const a = new Delta().retain(1, { color: 'blue' });
+    const b = new Delta().insert('B');
+    const expected = new Delta().insert('B').retain(1, { color: 'blue' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain + insert (detectionId)', function () {
-    var a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
-    var b = new Delta().insert('B');
-    var expected = new Delta()
+    const a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
+    const b = new Delta().insert('B');
+    const expected = new Delta()
       .insert('B')
       .retain(1, { color: 'blue', detectionId: '123' });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain + retain', function () {
-    var a = new Delta().retain(1, { color: 'blue' });
-    var b = new Delta().retain(1, { bold: true, color: 'red', font: null });
-    var expected = new Delta().retain(1, {
+    const a = new Delta().retain(1, { color: 'blue' });
+    const b = new Delta().retain(1, { bold: true, color: 'red', font: null });
+    const expected = new Delta().retain(1, {
       bold: true,
       color: 'red',
       font: null,
@@ -132,14 +132,14 @@ describe('compose()', function () {
   });
 
   it('retain + retain (detectionId)', function () {
-    var a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
-    var b = new Delta().retain(1, {
+    const a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
+    const b = new Delta().retain(1, {
       bold: true,
       color: 'red',
       font: null,
       detectionId: '234',
     });
-    var expected = new Delta().retain(1, {
+    const expected = new Delta().retain(1, {
       bold: true,
       color: 'red',
       font: null,
@@ -149,71 +149,73 @@ describe('compose()', function () {
   });
 
   it('retain + delete', function () {
-    var a = new Delta().retain(1, { color: 'blue' });
-    var b = new Delta().delete(1);
-    var expected = new Delta().delete(1);
+    const a = new Delta().retain(1, { color: 'blue' });
+    const b = new Delta().delete(1);
+    const expected = new Delta().delete(1);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain + delete (detectionId)', function () {
-    var a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
-    var b = new Delta().delete(1);
-    var expected = new Delta().delete(1);
+    const a = new Delta().retain(1, { color: 'blue', detectionId: '123' });
+    const b = new Delta().delete(1);
+    const expected = new Delta().delete(1);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain + delete (detectionId) - clears detection', function () {
-    var a = new Delta().retain(2, { color: 'blue', detectionId: '123' });
-    var b = new Delta().delete(1);
-    var expected = new Delta().delete(1).retain(1, { color: 'blue' });
+    const a = new Delta().retain(2, { color: 'blue', detectionId: '123' });
+    const b = new Delta().delete(1);
+    const expected = new Delta()
+      .delete(1)
+      .retain(1, { color: 'blue', detectionId: null });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert in middle of text', function () {
-    var a = new Delta().insert('Hello');
-    var b = new Delta().retain(3).insert('X');
-    var expected = new Delta().insert('HelXlo');
+    const a = new Delta().insert('Hello');
+    const b = new Delta().retain(3).insert('X');
+    const expected = new Delta().insert('HelXlo');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert in middle of detection (clears detection)', function () {
-    var a = new Delta().insert('Hello', { detectionId: '123' });
-    var b = new Delta().retain(3).insert('X');
-    var expected = new Delta().insert('HelXlo');
+    const a = new Delta().insert('Hello', { detectionId: '123' });
+    const b = new Delta().retain(3).insert('X');
+    const expected = new Delta().insert('HelXlo');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete in middle of detection (clears detection)', function () {
-    var a = new Delta().insert('Hello', { detectionId: '123' });
-    var b = new Delta().retain(3).delete(1);
-    var expected = new Delta().insert('Helo');
+    const a = new Delta().insert('Hello', { detectionId: '123' });
+    const b = new Delta().retain(3).delete(1);
+    const expected = new Delta().insert('Helo');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('insert and delete ordering', function () {
-    var a = new Delta().insert('Hello');
-    var b = new Delta().insert('Hello');
-    var insertFirst = new Delta().retain(3).insert('X').delete(1);
-    var deleteFirst = new Delta().retain(3).delete(1).insert('X');
-    var expected = new Delta().insert('HelXo');
+    const a = new Delta().insert('Hello');
+    const b = new Delta().insert('Hello');
+    const insertFirst = new Delta().retain(3).insert('X').delete(1);
+    const deleteFirst = new Delta().retain(3).delete(1).insert('X');
+    const expected = new Delta().insert('HelXo');
     expect(a.compose(insertFirst)).toEqual(expected);
     expect(b.compose(deleteFirst)).toEqual(expected);
   });
 
   it('insert and delete ordering with detection (clears detection)', function () {
-    var a = new Delta().insert('Hello', { detectionId: '123' });
-    var b = new Delta().insert('Hello', { detectionId: '123' });
-    var insertFirst = new Delta().retain(3).insert('X').delete(1);
-    var deleteFirst = new Delta().retain(3).delete(1).insert('X');
-    var expected = new Delta().insert('HelXo');
+    const a = new Delta().insert('Hello', { detectionId: '123' });
+    const b = new Delta().insert('Hello', { detectionId: '123' });
+    const insertFirst = new Delta().retain(3).insert('X').delete(1);
+    const deleteFirst = new Delta().retain(3).delete(1).insert('X');
+    const expected = new Delta().insert('HelXo');
     expect(a.compose(insertFirst)).toEqual(expected);
     expect(b.compose(deleteFirst)).toEqual(expected);
   });
 
   it('insert embed', function () {
-    var a = new Delta().insert(1, { src: 'http://quilljs.com/image.png' });
-    var b = new Delta().retain(1, { alt: 'logo' });
-    var expected = new Delta().insert(1, {
+    const a = new Delta().insert(1, { src: 'http://quilljs.com/image.png' });
+    const b = new Delta().retain(1, { alt: 'logo' });
+    const expected = new Delta().insert(1, {
       src: 'http://quilljs.com/image.png',
       alt: 'logo',
     });
@@ -221,70 +223,78 @@ describe('compose()', function () {
   });
 
   it('delete entire text', function () {
-    var a = new Delta().retain(4).insert('Hello');
-    var b = new Delta().delete(9);
-    var expected = new Delta().delete(4);
+    const a = new Delta().retain(4).insert('Hello');
+    const b = new Delta().delete(9);
+    const expected = new Delta().delete(4);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('delete entire text (detectionId)', function () {
-    var a = new Delta().retain(4).insert('Hello', { detectionId: '123' });
-    var b = new Delta().delete(9);
-    var expected = new Delta().delete(4);
+    const a = new Delta().retain(4).insert('Hello', { detectionId: '123' });
+    const b = new Delta().delete(9);
+    const expected = new Delta().delete(4);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain more than length of text', function () {
-    var a = new Delta().insert('Hello');
-    var b = new Delta().retain(10);
-    var expected = new Delta().insert('Hello');
+    const a = new Delta().insert('Hello');
+    const b = new Delta().retain(10);
+    const expected = new Delta().insert('Hello');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain empty embed', function () {
-    var a = new Delta().insert(1);
-    var b = new Delta().retain(1);
-    var expected = new Delta().insert(1);
+    const a = new Delta().insert(1);
+    const b = new Delta().retain(1);
+    const expected = new Delta().insert(1);
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('remove all attributes', function () {
-    var a = new Delta().insert('A', { bold: true });
-    var b = new Delta().retain(1, { bold: null });
-    var expected = new Delta().insert('A');
+    const a = new Delta().insert('A', { bold: true });
+    const b = new Delta().retain(1, { bold: null });
+    const expected = new Delta().insert('A');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('remove all attributes (detectionId)', function () {
-    var a = new Delta().insert('A', { detectionId: '123' });
-    var b = new Delta().retain(1, { detectionId: null });
-    var expected = new Delta().insert('A');
+    const a = new Delta().insert('A', { detectionId: '123' });
+    const b = new Delta().retain(1, { detectionId: null });
+    const expected = new Delta().insert('A');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('remove all embed attributes', function () {
-    var a = new Delta().insert(2, { bold: true });
-    var b = new Delta().retain(1, { bold: null });
-    var expected = new Delta().insert(2);
+    const a = new Delta().insert(2, { bold: true });
+    const b = new Delta().retain(1, { bold: null });
+    const expected = new Delta().insert(2);
     expect(a.compose(b)).toEqual(expected);
   });
 
-  // TODO: should the functionality be like embeds???
-  xit('remove all detection attributes (like embeds)', function () {
-    var a = new Delta().insert('AB', { detectionId: '123' });
-    var b = new Delta().retain(1, { detectionId: null });
-    var expected = new Delta().insert('AB');
+  it('remove all detection attributes (like embeds)', function () {
+    const a = new Delta().insert('AB', { detectionId: '123' });
+    const b = new Delta().retain(1, { detectionId: null });
+    const expected = new Delta().insert('AB');
+    expect(a.compose(b)).toEqual(expected);
+  });
+
+  it('replace detectionId (clear detection)', function () {
+    const a = new Delta().insert('AB', { detectionId: '123' });
+    const b = new Delta().retain(1, { detectionId: '234' });
+    const expected = new Delta()
+      .insert('A', { detectionId: '234' })
+      .insert('B');
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('immutability', function () {
-    var attr1 = { bold: true };
-    var attr2 = { bold: true };
-    var a1 = new Delta().insert('Test', attr1);
-    var a2 = new Delta().insert('Test', attr1);
-    var b1 = new Delta().retain(1, { color: 'red' }).delete(2);
-    var b2 = new Delta().retain(1, { color: 'red' }).delete(2);
-    var expected = new Delta()
+    const attr1 = { bold: true };
+    const attr2 = { bold: true };
+    const a1 = new Delta().insert('Test', attr1);
+    const a2 = new Delta().insert('Test', attr1);
+    const b1 = new Delta().retain(1, { color: 'red' }).delete(2);
+    const b2 = new Delta().retain(1, { color: 'red' }).delete(2);
+    const expected = new Delta()
       .insert('T', { color: 'red', bold: true })
       .insert('t', attr1);
     expect(a1.compose(b1)).toEqual(expected);
@@ -294,13 +304,13 @@ describe('compose()', function () {
   });
 
   it('retain start optimization', function () {
-    var a = new Delta()
+    const a = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true })
       .delete(1);
-    var b = new Delta().retain(3).insert('D');
-    var expected = new Delta()
+    const b = new Delta().retain(3).insert('D');
+    const expected = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true })
@@ -310,14 +320,14 @@ describe('compose()', function () {
   });
 
   it('retain start optimization split', function () {
-    var a = new Delta()
+    const a = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true })
       .retain(5)
       .delete(1);
-    var b = new Delta().retain(4).insert('D');
-    var expected = new Delta()
+    const b = new Delta().retain(4).insert('D');
+    const expected = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true })
@@ -329,29 +339,352 @@ describe('compose()', function () {
   });
 
   it('retain end optimization', function () {
-    var a = new Delta()
+    const a = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true });
-    var b = new Delta().delete(1);
-    var expected = new Delta().insert('B').insert('C', { bold: true });
+    const b = new Delta().delete(1);
+    const expected = new Delta().insert('B').insert('C', { bold: true });
     expect(a.compose(b)).toEqual(expected);
   });
 
   it('retain end optimization join', function () {
-    var a = new Delta()
+    const a = new Delta()
       .insert('A', { bold: true })
       .insert('B')
       .insert('C', { bold: true })
       .insert('D')
       .insert('E', { bold: true })
       .insert('F');
-    var b = new Delta().retain(1).delete(1);
-    var expected = new Delta()
+    const b = new Delta().retain(1).delete(1);
+    const expected = new Delta()
       .insert('AC', { bold: true })
       .insert('D')
       .insert('E', { bold: true })
       .insert('F');
     expect(a.compose(b)).toEqual(expected);
+  });
+
+  it('1', () => {
+    const doc = new Delta([
+      { insert: 'm' },
+      {
+        attributes: { color: 'red', italic: true, detectionId: '0' },
+        insert: 'H',
+      },
+      {
+        attributes: { font: 'sans-serif', italic: true, detectionId: '0' },
+        insert: 'e',
+      },
+      {
+        attributes: {
+          bold: true,
+          detectionId: '1',
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+        },
+        insert: 'a',
+      },
+      {
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          detectionId: '6',
+        },
+        insert: 'n',
+      },
+      { insert: 'wood' },
+      { insert: 'to', attributes: { color: 'purple' } },
+      { attributes: { color: 'purple', font: 'serif' }, insert: 2 },
+      { insert: { url: 'http://quilljs.com' } },
+      { insert: 'ves', attributes: { color: 'purple' } },
+      {
+        insert: 'x',
+        attributes: { bold: true, color: 'yellow', detectionId: '6' },
+      },
+      { insert: 't', attributes: { bold: true } },
+      { insert: 'snackhrtheough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' },
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: '5',
+        },
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' },
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true },
+      },
+      { insert: 'Cal', attributes: { bold: true } },
+      { insert: 'looh' },
+    ]);
+
+    const op1 = new Delta([
+      { retain: 3 },
+      { insert: 'toves', attributes: { color: 'purple' } },
+    ]);
+
+    const op2 = new Delta([
+      { retain: 1 },
+      {
+        insert: 'He',
+        attributes: { font: 'sans-serif', italic: true, detectionId: '0' },
+      },
+    ]);
+
+    const op3 = new Delta([
+      { retain: 3 },
+      { retain: 1, attributes: { bold: true, detectionId: '1' } },
+    ]);
+
+    const op4 = new Delta([
+      { retain: 1 },
+      { retain: 1, attributes: { color: 'red', font: null, bold: null } },
+      { retain: 3 },
+      { retain: 2, attributes: { bold: null } },
+      { insert: 2, attributes: { color: 'purple', font: 'serif' } },
+      { insert: { url: 'http://quilljs.com' } },
+      { retain: 3 },
+      { retain: 2, attributes: { bold: true, italic: null } },
+      { insert: 'snack' },
+    ]);
+
+    const op5 = new Delta([{ retain: 5 }, { insert: 'wood' }]);
+
+    const expected = new Delta([
+      { insert: 'm' },
+      {
+        insert: 'H',
+        attributes: { italic: true, detectionId: '0', color: 'red' },
+      },
+      {
+        insert: 'e',
+        attributes: { font: 'sans-serif', italic: true, detectionId: '0' },
+      },
+      {
+        insert: 'a',
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          bold: true,
+          detectionId: '1',
+        },
+      },
+      {
+        insert: 'n',
+        attributes: { italic: true, font: 'monospace', color: 'yellow' },
+      },
+      { insert: 'wood' },
+      { insert: 'to', attributes: { color: 'purple' } },
+      { insert: 2, attributes: { color: 'purple', font: 'serif' } },
+      { insert: { url: 'http://quilljs.com' } },
+      { insert: 'ves', attributes: { color: 'purple' } },
+      { insert: 'x', attributes: { color: 'yellow', bold: true } },
+      { insert: 't', attributes: { bold: true } },
+      { insert: 'snackhrtheough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' },
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: '5',
+        },
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' },
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true },
+      },
+      { insert: 'Cal', attributes: { bold: true } },
+      { insert: 'looh' },
+    ]);
+
+    expect(
+      doc.compose(op1).compose(op2).compose(op3).compose(op4).compose(op5),
+    ).toEqual(expected);
+  });
+
+  it('2', () => {
+    const doc = new Delta([
+      { insert: 'i', attributes: { font: 'serif' } },
+      {
+        attributes: { color: 'blue', detectionId: '2' },
+        insert: { url: 'http://quilljs.com' },
+      },
+      { insert: 't', attributes: { font: 'serif' } },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { color: 'yellow', italic: true },
+      },
+      { insert: 'm' },
+      {
+        insert: 'an',
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          detectionId: '6',
+        },
+      },
+      {
+        insert: 'x',
+        attributes: { color: 'orange', italic: true, detectionId: '6' },
+      },
+      { insert: 't', attributes: { color: 'orange', italic: true } },
+      { attributes: { italic: true, detectionId: '0' }, insert: 'the' },
+      { insert: 'h', attributes: { color: 'orange', italic: true } },
+      { insert: 'r', attributes: { color: 'orange' } },
+      { insert: 'theough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' },
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: '5',
+        },
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' },
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true },
+      },
+      { insert: 'Cal', attributes: { bold: true } },
+      { insert: 'looh' },
+    ]);
+
+    const list = [
+      new Delta([
+        { retain: 3 },
+        { retain: 3, attributes: { color: 'green', italic: true } },
+      ]),
+      new Delta([
+        { retain: 3 },
+        { retain: 4, attributes: { color: 'orange', bold: null } },
+      ]),
+      new Delta([
+        {
+          insert: { url: 'http://quilljs.com' },
+          attributes: { color: 'yellow', italic: true },
+        },
+        { retain: 5 },
+        { insert: 'the', attributes: { italic: true, detectionId: '0' } },
+      ]),
+      new Delta([
+        { insert: 'it', attributes: { font: 'serif', detectionId: '1' } },
+      ]),
+      new Delta([
+        { retain: 1 },
+        {
+          insert: { url: 'http://quilljs.com' },
+          attributes: { color: 'blue', detectionId: '2' },
+        },
+      ]),
+    ];
+
+    const expected = new Delta([
+      { insert: 'i', attributes: { font: 'serif' } },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { color: 'blue', detectionId: '2' },
+      },
+      { insert: 't', attributes: { font: 'serif' } },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { color: 'yellow', italic: true },
+      },
+      { insert: 'm' },
+      {
+        insert: 'an',
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          detectionId: '6',
+        },
+      },
+      {
+        insert: 'x',
+        attributes: { italic: true, color: 'orange', detectionId: '6' },
+      },
+      { insert: 't', attributes: { color: 'orange', italic: true } },
+      { insert: 'the', attributes: { italic: true, detectionId: '0' } },
+      { insert: 'h', attributes: { color: 'orange', italic: true } },
+      { insert: 'r', attributes: { color: 'orange' } },
+      { insert: 'theough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' },
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: '5',
+        },
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' },
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true },
+      },
+      { insert: 'Cal', attributes: { bold: true } },
+      { insert: 'looh' },
+    ]);
+
+    let s = doc;
+    list.forEach((delta) => {
+      s = s.compose(delta);
+    });
+    expect(s).toEqual(expected);
   });
 });
