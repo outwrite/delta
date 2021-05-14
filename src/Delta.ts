@@ -319,6 +319,8 @@ class Delta {
                       lastEnd = end;
                     } else if (start !== lastEnd) {
                       return true;
+                    } else {
+                      lastEnd = end;
                     }
                     if (opLength === null) {
                       hasNull = true;
@@ -347,8 +349,9 @@ class Delta {
             if (toReplace.length > 0) {
               const newDelta = new Delta();
               const iter = Op.iterator(cloneDeep(delta.ops));
-              toReplace.forEach(
-                ({ start, end, opLength, detId, thisOrOther }) => {
+              toReplace
+                .sort((a, b) => a.opLength - b.opLength)
+                .forEach(({ start, end, opLength, detId }) => {
                   while (
                     !(
                       newDelta.length() <= opLength &&
@@ -356,6 +359,9 @@ class Delta {
                     )
                   ) {
                     newDelta.push(iter.next());
+                    if (!iter.hasNext()) {
+                      throw Error('Iter has no next!');
+                    }
                   }
 
                   const offset = opLength - newDelta.length();
@@ -370,43 +376,35 @@ class Delta {
                     if (typeof op.delete === 'number') {
                       throw Error('delete should never be here...');
                     }
-                    if (thisOrOther) {
-                      const attr = { ...op.attributes, detectionId: null };
-                      if (typeof op.retain === 'number') {
-                        newDelta.retain(op.retain, attr);
-                      } else if (op.insert) {
-                        newDelta.insert(op.insert, attr);
-                      } else {
-                        throw Error('not valid operation');
-                      }
-                    } else {
-                      const attr = op.attributes;
+                    if (typeof op.retain === 'number') {
+                      // Keep nulls...
+                      let attr = op.attributes;
                       if (attr?.detectionId === detId) {
-                        delete attr['detectionId'];
-                        if (typeof op.retain === 'number') {
-                          newDelta.retain(op.retain, attr);
-                        } else if (op.insert) {
-                          newDelta.insert(op.insert, attr);
-                        } else {
-                          throw Error('not valid operation');
-                        }
+                        attr = { ...op.attributes, detectionId: null };
                       } else {
                         console.warn(
                           `detectionId not the same....${attr?.detectionId} vs ${detId}`,
                         );
-                        if (typeof op.retain === 'number') {
-                          newDelta.retain(op.retain, attr);
-                        } else if (op.insert) {
-                          newDelta.insert(op.insert, attr);
-                        } else {
-                          throw Error('not valid operation');
-                        }
+                        attr = { ...op.attributes, detectionId: null };
                       }
+                      newDelta.retain(op.retain, attr);
+                    } else if (op.insert) {
+                      const attr = op.attributes;
+                      if (attr?.detectionId === detId) {
+                        delete attr['detectionId'];
+                      } else if (attr) {
+                        console.warn(
+                          `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                        );
+                        delete attr['detectionId'];
+                      }
+                      newDelta.insert(op.insert, attr);
+                    } else {
+                      throw Error('not valid operation');
                     }
                     lengthToChange -= length;
                   }
-                },
-              );
+                });
 
               // Add in the rest of the operations...
               while (iter.hasNext()) {
@@ -489,6 +487,8 @@ class Delta {
             lastEnd = end;
           } else if (start !== lastEnd) {
             return true;
+          } else {
+            lastEnd = end;
           }
           if (opLength === null) {
             hasNull = true;
@@ -516,64 +516,62 @@ class Delta {
     if (toReplace.length > 0) {
       const newDelta = new Delta();
       const iter = Op.iterator(cloneDeep(delta.ops));
-      toReplace.forEach(({ start, end, opLength, detId, thisOrOther }) => {
-        while (
-          !(
-            newDelta.length() <= opLength &&
-            opLength < newDelta.length() + iter.peekLength()
-          )
-        ) {
-          newDelta.push(iter.next());
-        }
-
-        const offset = opLength - newDelta.length();
-        if (offset > 0) {
-          newDelta.push(iter.next(offset));
-        }
-
-        let lengthToChange = end - start;
-        while (lengthToChange > 0) {
-          const length = Math.min(iter.peekLength(), lengthToChange);
-          const op = iter.next(length);
-          if (typeof op.delete === 'number') {
-            throw Error('delete should never be here...');
+      toReplace
+        .sort((a, b) => a.opLength - b.opLength)
+        .forEach(({ start, end, opLength, detId }) => {
+          while (
+            !(
+              newDelta.length() <= opLength &&
+              opLength < newDelta.length() + iter.peekLength()
+            )
+          ) {
+            newDelta.push(iter.next());
+            if (!iter.hasNext()) {
+              throw Error('Iter has no next!');
+            }
           }
-          if (thisOrOther) {
-            const attr = { ...op.attributes, detectionId: null };
+
+          const offset = opLength - newDelta.length();
+          if (offset > 0) {
+            newDelta.push(iter.next(offset));
+          }
+
+          let lengthToChange = end - start;
+          while (lengthToChange > 0) {
+            const length = Math.min(iter.peekLength(), lengthToChange);
+            const op = iter.next(length);
+            if (typeof op.delete === 'number') {
+              throw Error('delete should never be here...');
+            }
             if (typeof op.retain === 'number') {
+              // Keep nulls...
+              let attr = op.attributes;
+              if (attr?.detectionId === detId) {
+                attr = { ...op.attributes, detectionId: null };
+              } else {
+                console.warn(
+                  `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                );
+                attr = { ...op.attributes, detectionId: null };
+              }
               newDelta.retain(op.retain, attr);
             } else if (op.insert) {
+              const attr = op.attributes;
+              if (attr?.detectionId === detId) {
+                delete attr['detectionId'];
+              } else if (attr) {
+                console.warn(
+                  `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                );
+                delete attr['detectionId'];
+              }
               newDelta.insert(op.insert, attr);
             } else {
               throw Error('not valid operation');
             }
-          } else {
-            const attr = op.attributes;
-            if (attr?.detectionId === detId) {
-              delete attr['detectionId'];
-              if (typeof op.retain === 'number') {
-                newDelta.retain(op.retain, attr);
-              } else if (op.insert) {
-                newDelta.insert(op.insert, attr);
-              } else {
-                throw Error('not valid operation');
-              }
-            } else {
-              console.warn(
-                `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-              );
-              if (typeof op.retain === 'number') {
-                newDelta.retain(op.retain, attr);
-              } else if (op.insert) {
-                newDelta.insert(op.insert, attr);
-              } else {
-                throw Error('not valid operation');
-              }
-            }
+            lengthToChange -= length;
           }
-          lengthToChange -= length;
-        }
-      });
+        });
 
       // Add in the rest of the operations...
       while (iter.hasNext()) {
@@ -979,6 +977,8 @@ class Delta {
             lastEnd = end;
           } else if (start !== lastEnd) {
             return true;
+          } else {
+            lastEnd = end;
           }
           if (op === null) {
             hasNull = true;
@@ -999,6 +999,8 @@ class Delta {
               lastEnd = end;
             } else if (start !== lastEnd) {
               return true;
+            } else {
+              lastEnd = end;
             }
             if (op === null) {
               hasNull = true;
