@@ -13,9 +13,48 @@ interface AttributeMarker {
   thisOrOther: boolean;
 }
 
+interface DetectionMap {
+  [detId: string]: AttributeMarker[];
+}
+
 interface AttributeReplacement extends AttributeMarker {
   opLength: number;
   detId: string;
+}
+
+function filterInvalidDetections(
+  detectionMap: DetectionMap,
+): [string[], AttributeReplacement[]] {
+  const toRemove = Object.keys(detectionMap).filter((detId) => {
+    let lastEnd: number | null = null;
+    return detectionMap[detId].some(({ start, end, opLength }) => {
+      if (lastEnd === null) {
+        lastEnd = end;
+      } else if (start !== lastEnd) {
+        return true;
+      } else {
+        lastEnd = end;
+      }
+      if (opLength === null) {
+        return true;
+      }
+      return false;
+    });
+  });
+
+  let toReplace: AttributeReplacement[] = [];
+  toRemove.forEach((detId) => {
+    toReplace = [
+      ...toReplace,
+      ...(detectionMap[detId].filter(
+        ({ opLength }) => opLength !== null,
+      ) as Array<AttributeReplacement>).map((value) => ({
+        ...value,
+        detId,
+      })),
+    ];
+  });
+  return [toRemove, toReplace.sort((a, b) => a.opLength - b.opLength)];
 }
 
 class Delta {
@@ -283,12 +322,36 @@ class Delta {
               end: runningCursor + length,
               opLength: delta.length(),
               thisOrOther:
-                thisOp.attributes?.detection === attributes.detectionId,
+                thisOp.attributes?.detectionId === attributes.detectionId,
             });
+
+            // One detectionId got erased!!!
+            if (
+              thisOp.attributes?.detectionId &&
+              otherOp.attributes?.detectionId
+            ) {
+              const thisOrOther =
+                thisOp.attributes.detectionId !== attributes.detectionId;
+              const detId = thisOrOther
+                ? thisOp.attributes.detectionId
+                : otherOp.attributes.detectionId;
+              if (!attributeMarker[detId]) {
+                attributeMarker[detId] = [];
+              }
+              attributeMarker[detId].push({
+                start: runningCursor,
+                end: runningCursor + length,
+                opLength: null,
+                thisOrOther,
+              });
+            }
           } else if (
             thisOp.attributes?.detectionId &&
-            otherOp.attributes === null
+            otherOp.attributes?.detectionId === null
           ) {
+            if (!attributeMarker[thisOp.attributes.detectionId]) {
+              attributeMarker[thisOp.attributes.detectionId] = [];
+            }
             attributeMarker[thisOp.attributes.detectionId].push({
               start: runningCursor,
               end: runningCursor + length,
@@ -309,137 +372,100 @@ class Delta {
             const rest = new Delta(thisIter.rest());
 
             // Remove any detections that have been split...
-            const detsToRemove = Object.keys(attributeMarker).filter(
-              (detId) => {
-                let lastEnd: number | null = null;
-                let hasNull = false;
-                return (
-                  attributeMarker[detId].some(({ start, end, opLength }) => {
-                    if (lastEnd === null) {
-                      lastEnd = end;
-                    } else if (start !== lastEnd) {
-                      return true;
-                    } else {
-                      lastEnd = end;
-                    }
-                    if (opLength === null) {
-                      hasNull = true;
-                      return false;
-                    }
-                    return false;
-                  }) ||
-                  (hasNull && lastEnd !== null)
-                );
-              },
+            const [detsToRemove, toReplace] = filterInvalidDetections(
+              attributeMarker,
             );
 
-            let toReplace: AttributeReplacement[] = [];
-            detsToRemove.forEach((detId) => {
-              toReplace = [
-                ...toReplace,
-                ...(attributeMarker[detId].filter(
-                  ({ opLength }) => opLength !== null,
-                ) as Array<AttributeReplacement>).map((value) => ({
-                  ...value,
-                  detId,
-                })),
-              ];
+            // validate the rest....
+            const validatedRest = cloneDeep(rest.ops).map((op) => {
+              if (
+                op.attributes?.detectionId &&
+                detsToRemove.indexOf(op.attributes.detectionId) !== -1
+              ) {
+                const newOp = cloneDeep(op);
+                let newAttributes = newOp.attributes;
+                if (op.retain) {
+                  newAttributes = { ...newAttributes, detectionId: null };
+                } else if (newAttributes) {
+                  delete newAttributes['detectionId'];
+                }
+                if (newAttributes && Object.keys(newAttributes).length === 0) {
+                  delete newOp['attributes'];
+                  return newOp;
+                }
+                return { ...newOp, attributes: newAttributes };
+              } else {
+                return op;
+              }
             });
 
             if (toReplace.length > 0) {
               const newDelta = new Delta();
               const iter = Op.iterator(cloneDeep(delta.ops));
-              toReplace
-                .sort((a, b) => a.opLength - b.opLength)
-                .forEach(({ start, end, opLength, detId }) => {
-                  while (
-                    !(
-                      newDelta.length() <= opLength &&
-                      opLength < newDelta.length() + iter.peekLength()
-                    )
-                  ) {
-                    newDelta.push(iter.next());
-                    if (!iter.hasNext()) {
-                      throw Error('Iter has no next!');
-                    }
+              toReplace.forEach(({ start, end, opLength, detId }) => {
+                while (
+                  !(
+                    newDelta.length() <= opLength &&
+                    opLength < newDelta.length() + iter.peekLength()
+                  )
+                ) {
+                  newDelta.push(iter.next());
+                  if (!iter.hasNext()) {
+                    throw Error('Iter has no next!');
                   }
+                }
 
-                  const offset = opLength - newDelta.length();
-                  if (offset > 0) {
-                    newDelta.push(iter.next(offset));
+                const offset = opLength - newDelta.length();
+                if (offset > 0) {
+                  newDelta.push(iter.next(offset));
+                }
+
+                let lengthToChange = end - start;
+                while (lengthToChange > 0) {
+                  const length = Math.min(iter.peekLength(), lengthToChange);
+                  const op = iter.next(length);
+                  if (typeof op.delete === 'number') {
+                    throw Error('delete should never be here...');
                   }
-
-                  let lengthToChange = end - start;
-                  while (lengthToChange > 0) {
-                    const length = Math.min(iter.peekLength(), lengthToChange);
-                    const op = iter.next(length);
-                    if (typeof op.delete === 'number') {
-                      throw Error('delete should never be here...');
-                    }
-                    if (typeof op.retain === 'number') {
-                      // Keep nulls...
-                      let attr = op.attributes;
-                      if (attr?.detectionId === detId) {
-                        attr = { ...op.attributes, detectionId: null };
-                      } else {
-                        console.warn(
-                          `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                        );
-                        attr = { ...op.attributes, detectionId: null };
-                      }
-                      newDelta.retain(op.retain, attr);
-                    } else if (op.insert) {
-                      const attr = op.attributes;
-                      if (attr?.detectionId === detId) {
-                        delete attr['detectionId'];
-                      } else if (attr) {
-                        console.warn(
-                          `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                        );
-                        delete attr['detectionId'];
-                      }
-                      newDelta.insert(op.insert, attr);
+                  if (typeof op.retain === 'number') {
+                    // Keep nulls...
+                    let attr = op.attributes;
+                    if (attr?.detectionId === detId) {
+                      attr = { ...op.attributes, detectionId: null };
                     } else {
-                      throw Error('not valid operation');
+                      console.warn(
+                        `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                      );
+                      attr = { ...op.attributes, detectionId: null };
                     }
-                    lengthToChange -= length;
+                    newDelta.retain(op.retain, attr);
+                  } else if (op.insert) {
+                    const attr = op.attributes;
+                    if (attr?.detectionId === detId) {
+                      delete attr['detectionId'];
+                    } else if (attr) {
+                      console.warn(
+                        `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                      );
+                      delete attr['detectionId'];
+                    }
+                    newDelta.insert(op.insert, attr);
+                  } else {
+                    throw Error('not valid operation');
                   }
-                });
+                  lengthToChange -= length;
+                }
+              });
 
               // Add in the rest of the operations...
               while (iter.hasNext()) {
                 newDelta.push(iter.next());
               }
 
-              // validate the rest....
-              const validatedRest = cloneDeep(rest.ops).map((op) => {
-                if (
-                  op.attributes?.detectionId &&
-                  detsToRemove.indexOf(op.attributes.detectionId) !== -1
-                ) {
-                  const newOp = cloneDeep(op);
-                  let newAttributes = newOp.attributes;
-                  if (op.retain) {
-                    newAttributes = { ...newAttributes, detectionId: null };
-                  } else if (newAttributes) {
-                    delete newAttributes['detectionId'];
-                  }
-                  if (
-                    newAttributes &&
-                    Object.keys(newAttributes).length === 0
-                  ) {
-                    newAttributes = undefined;
-                  }
-                  return { ...newOp, attributes: newAttributes };
-                } else {
-                  return op;
-                }
-              });
-
               return newDelta.concat(new Delta(validatedRest)).chop();
             }
 
-            return delta.concat(rest).chop();
+            return delta.concat(new Delta(validatedRest)).chop();
           }
 
           // Other op should be delete, we could be an insert or retain
@@ -478,100 +504,65 @@ class Delta {
     }
 
     // Remove any detections that have been split...
-    const detsToRemove = Object.keys(attributeMarker).filter((detId) => {
-      let lastEnd: number | null = null;
-      let hasNull = false;
-      return (
-        attributeMarker[detId].some(({ start, end, opLength }) => {
-          if (lastEnd === null) {
-            lastEnd = end;
-          } else if (start !== lastEnd) {
-            return true;
-          } else {
-            lastEnd = end;
-          }
-          if (opLength === null) {
-            hasNull = true;
-            return false;
-          }
-          return false;
-        }) ||
-        (hasNull && lastEnd !== null)
-      );
-    });
-
-    let toReplace: AttributeReplacement[] = [];
-    detsToRemove.forEach((detId) => {
-      toReplace = [
-        ...toReplace,
-        ...(attributeMarker[detId].filter(
-          ({ opLength }) => opLength !== null,
-        ) as Array<AttributeReplacement>).map((value) => ({
-          ...value,
-          detId,
-        })),
-      ];
-    });
+    const [, toReplace] = filterInvalidDetections(attributeMarker);
 
     if (toReplace.length > 0) {
       const newDelta = new Delta();
       const iter = Op.iterator(cloneDeep(delta.ops));
-      toReplace
-        .sort((a, b) => a.opLength - b.opLength)
-        .forEach(({ start, end, opLength, detId }) => {
-          while (
-            !(
-              newDelta.length() <= opLength &&
-              opLength < newDelta.length() + iter.peekLength()
-            )
-          ) {
-            newDelta.push(iter.next());
-            if (!iter.hasNext()) {
-              throw Error('Iter has no next!');
-            }
+      toReplace.forEach(({ start, end, opLength, detId }) => {
+        while (
+          !(
+            newDelta.length() <= opLength &&
+            opLength < newDelta.length() + iter.peekLength()
+          )
+        ) {
+          newDelta.push(iter.next());
+          if (!iter.hasNext()) {
+            throw Error('Iter has no next!');
           }
+        }
 
-          const offset = opLength - newDelta.length();
-          if (offset > 0) {
-            newDelta.push(iter.next(offset));
+        const offset = opLength - newDelta.length();
+        if (offset > 0) {
+          newDelta.push(iter.next(offset));
+        }
+
+        let lengthToChange = end - start;
+        while (lengthToChange > 0) {
+          const length = Math.min(iter.peekLength(), lengthToChange);
+          const op = iter.next(length);
+          if (typeof op.delete === 'number') {
+            throw Error('delete should never be here...');
           }
-
-          let lengthToChange = end - start;
-          while (lengthToChange > 0) {
-            const length = Math.min(iter.peekLength(), lengthToChange);
-            const op = iter.next(length);
-            if (typeof op.delete === 'number') {
-              throw Error('delete should never be here...');
-            }
-            if (typeof op.retain === 'number') {
-              // Keep nulls...
-              let attr = op.attributes;
-              if (attr?.detectionId === detId) {
-                attr = { ...op.attributes, detectionId: null };
-              } else {
-                console.warn(
-                  `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                );
-                attr = { ...op.attributes, detectionId: null };
-              }
-              newDelta.retain(op.retain, attr);
-            } else if (op.insert) {
-              const attr = op.attributes;
-              if (attr?.detectionId === detId) {
-                delete attr['detectionId'];
-              } else if (attr) {
-                console.warn(
-                  `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                );
-                delete attr['detectionId'];
-              }
-              newDelta.insert(op.insert, attr);
+          if (typeof op.retain === 'number') {
+            // Keep nulls...
+            let attr = op.attributes;
+            if (attr?.detectionId === detId) {
+              attr = { ...op.attributes, detectionId: null };
             } else {
-              throw Error('not valid operation');
+              console.warn(
+                `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+              );
+              attr = { ...op.attributes, detectionId: null };
             }
-            lengthToChange -= length;
+            newDelta.retain(op.retain, attr);
+          } else if (op.insert) {
+            const attr = op.attributes;
+            if (attr?.detectionId === detId) {
+              delete attr['detectionId'];
+            } else if (attr) {
+              console.warn(
+                `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+              );
+              delete attr['detectionId'];
+            }
+            newDelta.insert(op.insert, attr);
+          } else {
+            throw Error('not valid operation');
           }
-        });
+          lengthToChange -= length;
+        }
+      });
 
       // Add in the rest of the operations...
       while (iter.hasNext()) {
