@@ -729,18 +729,6 @@ class Delta {
         const op = thisIter.next();
         const length = Op.length(op);
 
-        if (op.attributes?.detectionId) {
-          if (!detectionMap[op.attributes.detectionId]) {
-            detectionMap[op.attributes.detectionId] = [];
-          }
-          detectionMap[op.attributes.detectionId].push({
-            start: runningCursor,
-            end: runningCursor + length,
-            opLength: delta.length(),
-            thisOrOther: true,
-          });
-        }
-
         delta.retain(length);
 
         runningCursor += length;
@@ -784,18 +772,6 @@ class Delta {
           // Our delete either makes their delete redundant or removes their retain
           continue;
         } else if (otherOp.delete) {
-          if (thisOp.attributes?.detectionId) {
-            if (!detectionMap[thisOp.attributes.detectionId]) {
-              detectionMap[thisOp.attributes.detectionId] = [];
-            }
-            detectionMap[thisOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: null,
-              thisOrOther: true,
-            });
-          }
-
           delta.push(otherOp);
           runningCursor -= length;
         } else {
@@ -806,58 +782,20 @@ class Delta {
             priority,
           );
 
-          if (typeof attributes?.detectionId !== 'undefined') {
-            // attribute is from the otherOp
-            if (otherOp.attributes?.detectionId) {
-              if (!detectionMap[otherOp.attributes.detectionId]) {
-                detectionMap[otherOp.attributes.detectionId] = [];
-              }
-              detectionMap[otherOp.attributes.detectionId].push({
-                start: runningCursor,
-                end: runningCursor + length,
-                opLength: delta.length(),
-                thisOrOther: false,
-              });
+          if (otherOp.attributes?.detectionId) {
+            if (!detectionMap[otherOp.attributes.detectionId]) {
+              detectionMap[otherOp.attributes.detectionId] = [];
             }
-
-            if (thisOp.attributes?.detectionId) {
-              if (!detectionMap[thisOp.attributes.detectionId]) {
-                detectionMap[thisOp.attributes.detectionId] = [];
-              }
-              detectionMap[thisOp.attributes.detectionId].push({
-                start: runningCursor,
-                end: runningCursor + length,
-                opLength: null,
-                thisOrOther: true,
-              });
-            }
-          } else {
-            // attribute is from thisOp
-            if (thisOp.attributes?.detectionId) {
-              if (!detectionMap[thisOp.attributes.detectionId]) {
-                detectionMap[thisOp.attributes.detectionId] = [];
-              }
-              detectionMap[thisOp.attributes.detectionId].push({
-                start: runningCursor,
-                end: runningCursor + length,
-                opLength: delta.length(),
-                thisOrOther: true,
-              });
-            }
-
-            if (otherOp.attributes?.detectionId) {
-              if (!detectionMap[otherOp.attributes.detectionId]) {
-                detectionMap[otherOp.attributes.detectionId] = [];
-              }
-              detectionMap[otherOp.attributes.detectionId].push({
-                start: runningCursor,
-                end: runningCursor + length,
-                opLength: null,
-                thisOrOther: false,
-              });
-            }
+            detectionMap[otherOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength:
+                typeof attributes?.detectionId === 'undefined'
+                  ? null
+                  : delta.length(),
+              thisOrOther: false,
+            });
           }
-
           delta.retain(length, attributes);
 
           runningCursor += length;
