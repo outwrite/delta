@@ -718,36 +718,209 @@ class Delta {
     const otherIter = Op.iterator(other.ops);
     const delta = new Delta();
 
+    let runningCursor = 0;
+    const detectionMap: DetectionMap = {};
+
     while (thisIter.hasNext() || otherIter.hasNext()) {
       if (
         thisIter.peekType() === 'insert' &&
         (priority || otherIter.peekType() !== 'insert')
       ) {
-        delta.retain(Op.length(thisIter.next()));
+        const op = thisIter.next();
+        const length = Op.length(op);
+
+        if (op.attributes?.detectionId) {
+          if (!detectionMap[op.attributes.detectionId]) {
+            detectionMap[op.attributes.detectionId] = [];
+          }
+          detectionMap[op.attributes.detectionId].push({
+            start: runningCursor,
+            end: runningCursor + length,
+            opLength: delta.length(),
+            thisOrOther: true,
+          });
+        }
+
+        delta.retain(length);
+
+        runningCursor += length;
       } else if (otherIter.peekType() === 'insert') {
-        delta.push(otherIter.next());
+        const op = otherIter.next();
+        const length = Op.length(op);
+
+        if (op.attributes?.detectionId) {
+          if (!detectionMap[op.attributes.detectionId]) {
+            detectionMap[op.attributes.detectionId] = [];
+          }
+          detectionMap[op.attributes.detectionId].push({
+            start: runningCursor,
+            end: runningCursor + length,
+            opLength: delta.length(),
+            thisOrOther: false,
+          });
+        }
+
+        delta.push(op);
+
+        runningCursor += length;
       } else {
         const length = Math.min(thisIter.peekLength(), otherIter.peekLength());
         const thisOp = thisIter.next(length);
         const otherOp = otherIter.next(length);
 
         if (thisOp.delete) {
+          if (otherOp.attributes?.detectionId) {
+            if (!detectionMap[otherOp.attributes.detectionId]) {
+              detectionMap[otherOp.attributes.detectionId] = [];
+            }
+            detectionMap[otherOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: null,
+              thisOrOther: false,
+            });
+          }
+
           // Our delete either makes their delete redundant or removes their retain
           continue;
         } else if (otherOp.delete) {
+          if (thisOp.attributes?.detectionId) {
+            if (!detectionMap[thisOp.attributes.detectionId]) {
+              detectionMap[thisOp.attributes.detectionId] = [];
+            }
+            detectionMap[thisOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength: null,
+              thisOrOther: true,
+            });
+          }
+
           delta.push(otherOp);
+          runningCursor -= length;
         } else {
           // We retain either their retain or insert
-          delta.retain(
-            length,
-            AttributeMap.transform(
-              thisOp.attributes,
-              otherOp.attributes,
-              priority,
-            ),
+          const attributes = AttributeMap.transform(
+            thisOp.attributes,
+            otherOp.attributes,
+            priority,
           );
+
+          if (typeof attributes?.detectionId !== 'undefined') {
+            // attribute is from the otherOp
+            if (otherOp.attributes?.detectionId) {
+              if (!detectionMap[otherOp.attributes.detectionId]) {
+                detectionMap[otherOp.attributes.detectionId] = [];
+              }
+              detectionMap[otherOp.attributes.detectionId].push({
+                start: runningCursor,
+                end: runningCursor + length,
+                opLength: delta.length(),
+                thisOrOther: false,
+              });
+            }
+
+            if (thisOp.attributes?.detectionId) {
+              if (!detectionMap[thisOp.attributes.detectionId]) {
+                detectionMap[thisOp.attributes.detectionId] = [];
+              }
+              detectionMap[thisOp.attributes.detectionId].push({
+                start: runningCursor,
+                end: runningCursor + length,
+                opLength: null,
+                thisOrOther: true,
+              });
+            }
+          } else {
+            // attribute is from thisOp
+            if (thisOp.attributes?.detectionId) {
+              if (!detectionMap[thisOp.attributes.detectionId]) {
+                detectionMap[thisOp.attributes.detectionId] = [];
+              }
+              detectionMap[thisOp.attributes.detectionId].push({
+                start: runningCursor,
+                end: runningCursor + length,
+                opLength: delta.length(),
+                thisOrOther: true,
+              });
+            }
+
+            if (otherOp.attributes?.detectionId) {
+              if (!detectionMap[otherOp.attributes.detectionId]) {
+                detectionMap[otherOp.attributes.detectionId] = [];
+              }
+              detectionMap[otherOp.attributes.detectionId].push({
+                start: runningCursor,
+                end: runningCursor + length,
+                opLength: null,
+                thisOrOther: false,
+              });
+            }
+          }
+
+          delta.retain(length, attributes);
+
+          runningCursor += length;
         }
       }
+    }
+
+    const [, toReplace] = filterInvalidDetections(detectionMap);
+    if (toReplace.length > 0) {
+      const newDelta = new Delta();
+      const iter = Op.iterator(cloneDeep(delta.ops));
+      toReplace.forEach(({ start, end, opLength, detId }) => {
+        while (
+          !(
+            newDelta.length() <= opLength &&
+            opLength < newDelta.length() + iter.peekLength()
+          )
+        ) {
+          newDelta.push(iter.next());
+          if (!iter.hasNext()) {
+            throw Error('Iter has no next!');
+          }
+        }
+
+        const offset = opLength - newDelta.length();
+        if (offset > 0) {
+          newDelta.push(iter.next(offset));
+        }
+
+        let lengthToChange = end - start;
+        while (lengthToChange > 0) {
+          const length = Math.min(iter.peekLength(), lengthToChange);
+          const op = iter.next(length);
+          if (typeof op.delete === 'number') {
+            throw Error('delete should never be here...');
+          }
+
+          const attr = cloneDeep(op.attributes);
+          if (attr?.detectionId === detId) {
+            delete attr['detectionId'];
+          } else if (attr) {
+            console.warn(
+              `detectionId not the same....${attr?.detectionId} vs ${detId}`,
+            );
+            delete attr['detectionId'];
+          }
+          if (typeof op.retain === 'number') {
+            newDelta.retain(op.retain, attr);
+          } else if (op.insert) {
+            newDelta.insert(op.insert, attr);
+          } else {
+            throw Error('invalid operation');
+          }
+
+          lengthToChange -= length;
+        }
+      });
+
+      // Add in the rest of the operations...
+      while (iter.hasNext()) {
+        newDelta.push(iter.next());
+      }
+      return newDelta.chop();
     }
 
     return delta.chop();
