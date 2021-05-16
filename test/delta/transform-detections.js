@@ -11,14 +11,10 @@ describe('validated detections', function () {
   describe('insert inside of detection retain', function () {
     var a = new Delta().retain(1).insert('X');
     var b = new Delta().retain(2, { detectionId: '123' });
-    // var expectedA = new Delta().retain(1, { detectionId: '123' }).retain(1); // original
-    // var expectedA = new Delta().retain(1, { detectionId: null }).retain(1); // modified
-    // var expectedA = new Delta().retain(2); // nulls are not needed for transforms
+    // var expectedA = new Delta().retain(1, { detectionId: '123' }).retain(1).retain(1, { detectionId: '123' }); // original
+    // var expectedA = new Delta().retain(3); // modified - we dont need to specifcally "null" anything
     var expectedA = new Delta(); // chop
-    // var expectedB = new Delta().retain(1).insert('A'); // original
-    // var expectedB = new Delta().retain(1, { detectionId: null }).insert('A').retain(1, { detectionId: null }); // modified
-    // var expectedB = new Delta().retain(1).insert('A').retain(1); // nulls are not needed for transforms
-    var expectedB = new Delta().retain(1).insert('X'); // chop
+    var expectedB = new Delta().retain(1).insert('X'); // original
 
     it('transforms', function () {
       expect(a.transform(b, true)).toEqual(expectedA);
@@ -66,8 +62,8 @@ describe('validated detections', function () {
     var a = new Delta().retain(2, { detectionId: '123' });
     var b = new Delta().delete(1);
     var expectedA = new Delta().delete(1); // same as original
-    // var expected2 = new Delta().retain(2, { detectionId: '123' }); // original
-    // var expected2 = new Delta().retain(2); // modified
+    // var expectedB = new Delta().retain(1, { detectionId: '123' }); // original
+    // var expectedB = new Delta().retain(1); // modified
     var expectedB = new Delta(); // chop
 
     it('transforms', function () {
