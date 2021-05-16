@@ -34,7 +34,7 @@
     "build": "tsc",
     "prepare": "npm run build",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "npm run build; jasmine test/*.js test/**/*.js",
+    "test": "npm run build & jasmine test/*.js test/**/*.js",
     "test:coverage": "istanbul cover jasmine test/*.js test/**/*.js",
     "test:coverage:report": "cat coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
