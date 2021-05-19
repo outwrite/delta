@@ -7,6 +7,10 @@ var Delta = require('../../dist/Delta');
  * - get rid of any detections that have been split by an insert
  */
 
+function transformX(left, right) {
+  return [right.transform(left, true), left.transform(right, false)];
+}
+
 describe('validated detections', function () {
   describe('insert inside of detection retain', function () {
     var a = new Delta().retain(1).insert('X');
@@ -222,5 +226,254 @@ describe('validated detections', function () {
       expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
       expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
     });
+  });
+
+  it('sdasd', function () {
+    const sop = new Delta([
+      { insert: 'He' },
+      { retain: 3 },
+      { attributes: { italic: true }, insert: 1 },
+      { retain: 2 },
+      { delete: 3 },
+      {
+        retain: 2,
+        attributes: { color: 'purple', bold: null, italic: true },
+      },
+    ]);
+
+    const cop = new Delta([
+      { retain: 1, attributes: { italic: null, detectionId: null } },
+      {
+        retain: 3,
+        attributes: {
+          color: 'yellow',
+          bold: null,
+          italic: true,
+          detectionId: '6',
+        },
+      },
+      { insert: 'thrtheough' },
+    ]);
+
+    expect(cop.transform(sop)).toEqual(
+      new Delta([
+        { insert: 'He' },
+        { retain: 3 },
+        { attributes: { italic: true }, insert: 1 },
+        { retain: 12 },
+        { delete: 3 },
+        {
+          retain: 2,
+          attributes: { color: 'purple', bold: null, italic: true },
+        },
+      ]),
+    );
+    expect(sop.transform(cop)).toEqual(
+      new Delta([
+        { retain: 2 },
+        { attributes: { italic: null, detectionId: null }, retain: 1 },
+        {
+          retain: 2,
+          attributes: { color: 'yellow', bold: null, italic: true },
+        },
+        { retain: 1 },
+        {
+          retain: 1,
+          attributes: { color: 'yellow', bold: null, italic: true },
+        },
+        { insert: 'thrtheough' },
+      ]),
+    );
+  });
+
+  it('a', function () {
+    const original = new Delta([
+      {
+        insert: 'a',
+        attributes: { font: 'serif', bold: true, italic: true },
+      },
+      { insert: 'w' },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: {
+          color: 'orange',
+          detectionId: '16f19f4b-aeb3-44d6-8987-f272bc061b06',
+        },
+      },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { bold: true },
+      },
+      {
+        insert: 2,
+        attributes: { detectionId: '9c4180de-2297-4eca-8553-e0d606a05e50' },
+      },
+      { insert: 'k', attributes: { color: 'red', italic: true } },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { font: 'serif', italic: true },
+      },
+      { insert: 'Tr' },
+      { insert: 'est', attributes: { font: 'monospace', bold: true } },
+      { insert: 'ehedcame' },
+      {
+        insert: 'with',
+        attributes: { detectionId: 'ea0a9f6a-cae7-497f-bfab-ff3749719b95' },
+      },
+      { insert: 'as' },
+      { insert: 'sh', attributes: { italic: true } },
+      { insert: 'h' },
+      {
+        insert: 'iff',
+        attributes: {
+          font: 'monospace',
+          bold: true,
+          italic: true,
+          detectionId: '4ca892f7-383f-44a6-a6fc-87846767d526',
+        },
+      },
+      {
+        insert: 'l',
+        attributes: { detectionId: '1d05b61c-6c19-4280-9967-8d83638fb6d2' },
+      },
+      {
+        insert: 'ng',
+        attributes: {
+          bold: true,
+          detectionId: '50bd9de5-de2e-4c12-9ce8-e5d154c56156',
+        },
+      },
+      { insert: 'm', attributes: { font: 'sans-serif', bold: true } },
+      { insert: 'So' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { font: 'serif', color: 'orange' },
+      },
+      { insert: 'y', attributes: { italic: true, color: 'orange' } },
+      { insert: 're', attributes: { italic: true } },
+      { insert: 'h', attributes: { bold: true } },
+      { insert: 2, attributes: { bold: true } },
+      { insert: 'houe' },
+      { insert: 'e', attributes: { font: 'sans-serif', italic: true } },
+      { insert: 'vo', attributes: { font: 'sans-serif', bold: true } },
+      { insert: 'rpal', attributes: { font: 'serif' } },
+      { insert: 'h', attributes: { color: 'red' } },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { italic: true },
+      },
+      { insert: 'a', attributes: { color: 'red' } },
+      { insert: 'nthed' },
+      {
+        insert: 'oo',
+        attributes: {
+          color: 'purple',
+          detectionId: '2dcaf529-e262-431d-bd02-824e252e164b',
+        },
+      },
+      { insert: 'd' },
+      { insert: 'to', attributes: { color: 'purple' } },
+      { insert: 2, attributes: { color: 'orange', font: 'serif' } },
+      {
+        insert: { url: 'http://quilljs.com' },
+        attributes: { color: 'orange', font: 'serif' },
+      },
+      { insert: 've', attributes: { color: 'orange', font: 'serif' } },
+      { insert: 's', attributes: { color: 'purple' } },
+      { insert: 'x', attributes: { color: 'yellow', bold: true } },
+      { insert: 't', attributes: { bold: true } },
+      { insert: 'snackhrtheough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' },
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: 'aa4f15f3-27a7-4ed5-8634-459f8442c1e0',
+        },
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' },
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true },
+      },
+      {
+        insert: 'Cal',
+        attributes: {
+          bold: true,
+          detectionId: '0119fa75-1136-4023-8ac3-69e932839181',
+        },
+      },
+      { insert: 'looh' },
+    ]);
+
+    const serverComposed = new Delta([
+      { retain: 3 },
+      {
+        attributes: {
+          font: 'monospace',
+          bold: true,
+          detectionId: '2c6811ab-46f5-4672-84ec-bc3a9bd9a74d',
+        },
+        insert: { image: 'http://quilljs.com' },
+      },
+      {
+        attributes: {
+          color: 'purple',
+          detectionId: '8b2585d4-bbd7-4de8-a18c-23fdd915c00f',
+        },
+        insert: 'mome',
+      },
+      {
+        retain: 1,
+        attributes: {
+          bold: null,
+          italic: true,
+          detectionId: '21b9c1e8-d8f9-43ea-8f91-c3890e25a2aa',
+        },
+      },
+      { delete: 1 },
+      {
+        retain: 1,
+        attributes: {
+          bold: null,
+          italic: true,
+          detectionId: '21b9c1e8-d8f9-43ea-8f91-c3890e25a2aa',
+        },
+      },
+      { delete: 6 },
+      { retain: 1, attributes: { detectionId: null } },
+      { retain: 3 },
+      { insert: { image: 'http://quilljs.com' } },
+      { retain: 1 },
+      { delete: 3 },
+      { retain: 4 },
+      { delete: 3 },
+    ]);
+
+    const clientComposed = new Delta([
+      { retain: 5 },
+      {
+        retain: 4,
+        attributes: { detectionId: '6df775a6-b82c-4cc3-ba7c-7740679f0e97' },
+      },
+    ]);
+
+    const [server_, client_] = transformX(serverComposed, clientComposed);
+
+    expect(original.compose(serverComposed).compose(client_)).toEqual(
+      original.compose(clientComposed).compose(server_),
+    );
   });
 });
