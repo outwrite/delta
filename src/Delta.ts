@@ -1,4 +1,5 @@
 import diff from 'fast-diff';
+import partition from 'lodash.partition';
 import cloneDeep from 'lodash.clonedeep';
 import isEqual from 'lodash.isequal';
 import AttributeMap from './AttributeMap';
@@ -24,34 +25,60 @@ interface AttributeReplacement extends AttributeMarker {
 
 function filterInvalidDetections(
   detectionMap: DetectionMap,
-): [string[], AttributeReplacement[]] {
-  const toRemove = Object.keys(detectionMap).filter((detId) => {
-    let lastEnd: number | null = null;
-    return detectionMap[detId].some(({ start, end, opLength }) => {
-      if (lastEnd === null) {
-        lastEnd = end;
-      } else if (start !== lastEnd) {
+): [[string, 'both' | 'this' | 'other'][], AttributeReplacement[]] {
+  const toRemove = Object.keys(detectionMap).reduce<
+    Array<[string, 'both' | 'this' | 'other']>
+  >((list, detId) => {
+    const sorted = detectionMap[detId].sort((a, b) => a.start - b.start);
+
+    let lastRange: { start: number; end: number } | null = null;
+    const isNotAdjacent = sorted.some(({ start, end, opLength }) => {
+      if (opLength === null) return false; // dont consider already deleted ones...
+      if (lastRange === null) {
+        lastRange = { start, end };
+      } else if (lastRange.end < start) {
         return true;
       } else {
-        lastEnd = end;
-      }
-      if (opLength === null) {
-        return true;
+        lastRange = { start, end };
       }
       return false;
     });
-  });
+
+    if (isNotAdjacent) {
+      list.push([detId, 'both']);
+      return list;
+    }
+
+    const [thisValues, otherValues] = partition(
+      detectionMap[detId],
+      ({ thisOrOther }) => thisOrOther,
+    );
+    const removeThis = thisValues.some(({ opLength }) => opLength === null);
+    const removeOther = otherValues.some(({ opLength }) => opLength === null);
+    if (removeThis && removeOther) {
+      list.push([detId, 'both']);
+    } else if (removeThis) {
+      list.push([detId, 'this']);
+    } else if (removeOther) {
+      list.push([detId, 'other']);
+    }
+
+    return list;
+  }, []);
 
   let toReplace: AttributeReplacement[] = [];
-  toRemove.forEach((detId) => {
+  toRemove.forEach(([detId, option]) => {
     toReplace = [
       ...toReplace,
       ...(detectionMap[detId].filter(
-        ({ opLength }) => opLength !== null,
-      ) as Array<AttributeReplacement>).map((value) => ({
-        ...value,
-        detId,
-      })),
+        ({ opLength, thisOrOther }) =>
+          opLength !== null &&
+          (option === 'both'
+            ? true
+            : option === 'this'
+            ? thisOrOther
+            : !thisOrOther),
+      ) as Array<AttributeReplacement>).map((value) => ({ ...value, detId })),
     ];
   });
   return [toRemove, toReplace.sort((a, b) => a.opLength - b.opLength)];
@@ -291,7 +318,6 @@ class Delta {
         delta.push(op);
         runningCursor += Op.length(op);
       } else if (thisIter.peekType() === 'delete') {
-        runningCursor -= thisIter.peekLength();
         delta.push(thisIter.next());
       } else {
         const length = Math.min(thisIter.peekLength(), otherIter.peekLength());
@@ -377,10 +403,14 @@ class Delta {
             );
 
             // validate the rest....
+            const detsToRemoveForThis = detsToRemove
+              .filter(([, option]) => option === 'both' || option === 'this')
+              .map(([detId]) => detId);
+
             const validatedRest = cloneDeep(rest.ops).map((op) => {
               if (
                 op.attributes?.detectionId &&
-                detsToRemove.indexOf(op.attributes.detectionId) !== -1
+                detsToRemoveForThis.indexOf(op.attributes.detectionId) !== -1
               ) {
                 const newOp = cloneDeep(op);
                 let newAttributes = newOp.attributes;
@@ -486,7 +516,6 @@ class Delta {
             });
           }
           delta.push(otherOp);
-          runningCursor -= length;
         } else {
           if (thisOp.attributes?.detectionId) {
             if (!attributeMarker[thisOp.attributes.detectionId]) {
