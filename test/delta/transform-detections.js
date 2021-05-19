@@ -15,39 +15,39 @@ describe('validated detections', function () {
   describe('insert inside of detection retain', function () {
     var a = new Delta().retain(1).insert('X');
     var b = new Delta().retain(2, { detectionId: '123' });
-    // var expectedA = new Delta().retain(1, { detectionId: '123' }).retain(1).retain(1, { detectionId: '123' }); // original
-    // var expectedA = new Delta().retain(3); // modified - we dont need to specifcally "null" anything
-    var expectedA = new Delta(); // chop
-    var expectedB = new Delta().retain(1).insert('X'); // original
+    var a_ = new Delta().retain(1).insert('X'); // original
+    // var b_ = new Delta().retain(1, { detectionId: '123' }).retain(1).retain(1, { detectionId: '123' }); // original
+    // var b_ = new Delta().retain(3); // modified - we dont need to specifcally "null" anything
+    var b_ = new Delta(); // chop
 
     it('transforms', function () {
-      expect(a.transform(b, true)).toEqual(expectedA);
-      expect(b.transform(a, true)).toEqual(expectedB);
-      expect(a.transform(b, false)).toEqual(expectedA);
-      expect(b.transform(a, false)).toEqual(expectedB);
+      expect(a.transform(b, true)).toEqual(b_);
+      expect(b.transform(a, true)).toEqual(a_);
+      expect(a.transform(b, false)).toEqual(b_);
+      expect(b.transform(a, false)).toEqual(a_);
     });
 
     it('compose + transform', function () {
       const doc = new Delta().insert('ABC');
       const final = new Delta().insert('AXBC');
-      expect(doc.compose(a).compose(expectedA, true)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, false)).toEqual(final);
-      expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
+      expect(doc.compose(a).compose(b_, true)).toEqual(final);
+      expect(doc.compose(b).compose(a_, false)).toEqual(final);
+      expect(doc.compose(a).compose(b_, false)).toEqual(final);
+      expect(doc.compose(b).compose(a_, true)).toEqual(final);
     });
   });
 
   describe('det insert & delete [not modified]', function () {
     var a = new Delta().insert('X', { detectionId: '123' });
     var b = new Delta().delete(1);
-    var expectedA = new Delta().retain(1).delete(1);
-    var expectedB = new Delta().insert('X', { detectionId: '123' });
+    var a_ = new Delta().insert('X', { detectionId: '123' });
+    var b_ = new Delta().retain(1).delete(1);
 
     it('transforms', function () {
-      expect(a.transform(b, true)).toEqual(expectedA);
-      expect(b.transform(a, true)).toEqual(expectedB);
-      expect(a.transform(b, false)).toEqual(expectedA);
-      expect(b.transform(a, false)).toEqual(expectedB);
+      expect(a.transform(b, true)).toEqual(b_);
+      expect(b.transform(a, true)).toEqual(a_);
+      expect(a.transform(b, false)).toEqual(b_);
+      expect(b.transform(a, false)).toEqual(a_);
     });
 
     it('compose + transform', function () {
@@ -55,35 +55,35 @@ describe('validated detections', function () {
       const final = new Delta()
         .insert('X', { detectionId: '123' })
         .insert('BC');
-      expect(doc.compose(a).compose(expectedA, true)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, false)).toEqual(final);
-      expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
+      expect(doc.compose(a).compose(b_, true)).toEqual(final);
+      expect(doc.compose(b).compose(a_, false)).toEqual(final);
+      expect(doc.compose(a).compose(b_, false)).toEqual(final);
+      expect(doc.compose(b).compose(a_, true)).toEqual(final);
     });
   });
 
   describe('det retain & delete', function () {
     var a = new Delta().retain(2, { detectionId: '123' });
     var b = new Delta().delete(1);
-    var expectedA = new Delta().delete(1); // same as original
-    // var expectedB = new Delta().retain(1, { detectionId: '123' }); // original
-    // var expectedB = new Delta().retain(1); // modified
-    var expectedB = new Delta(); // chop
+    // var a_ = new Delta().retain(1, { detectionId: '123' }); // original
+    // var a_ = new Delta().retain(1); // modified
+    var a_ = new Delta(); // chop
+    var b_ = new Delta().delete(1); // same as original
 
     it('transforms', function () {
-      expect(a.transform(b, true)).toEqual(expectedA);
-      expect(b.transform(a, true)).toEqual(expectedB);
-      expect(a.transform(b, false)).toEqual(expectedA);
-      expect(b.transform(a, false)).toEqual(expectedB);
+      expect(a.transform(b, true)).toEqual(b_);
+      expect(b.transform(a, true)).toEqual(a_);
+      expect(a.transform(b, false)).toEqual(b_);
+      expect(b.transform(a, false)).toEqual(a_);
     });
 
     it('compose + transform', function () {
       const doc = new Delta().insert('ABC');
       const final = new Delta().insert('BC');
-      expect(doc.compose(a).compose(expectedA, true)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, false)).toEqual(final);
-      expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
+      expect(doc.compose(a).compose(b_, true)).toEqual(final);
+      expect(doc.compose(b).compose(a_, false)).toEqual(final);
+      expect(doc.compose(a).compose(b_, false)).toEqual(final);
+      expect(doc.compose(b).compose(a_, true)).toEqual(final);
     });
   });
 
@@ -91,27 +91,21 @@ describe('validated detections', function () {
     var a = new Delta().retain(2).retain(2, { detectionId: '123' });
     var b = new Delta().retain(3, { detectionId: '234' });
 
-    // var expectedAPriority = new Delta().retain(2, { detectionId: '234' }); // original
-    // var expectedAPriority = new Delta().retain(2); // modified
-    var expectedAPriority = new Delta(); // chop
-    // var expectedBPriority = new Delta().retain(3).retain(1, { detectionId: '123' }); // original
-    // var expectedBPriority = new Delta().retain(3).retain(1); // modified
-    var expectedBPriority = new Delta(); // chop
+    var a_a = new Delta().retain(2).retain(2, { detectionId: '123' });
+    // var a_b = new Delta().retain(3).retain(1, { detectionId: '123' }); // original
+    // var a_b = new Delta().retain(3).retain(1); // modified
+    var a_b = new Delta(); // chop
 
-    // without priority - same as original
-    var expectedAWithout = new Delta().retain(3, { detectionId: '234' });
-    var expectedBWithout = new Delta()
-      .retain(2)
-      .retain(2, { detectionId: '123' });
+    var b_b = new Delta().retain(3, { detectionId: '234' });
+    // var b_a = new Delta().retain(2, { detectionId: '234' }); // original
+    // var b_a = new Delta().retain(2); // modified
+    var b_a = new Delta(); // chop
 
-    it('transforms with priority', function () {
-      expect(a.transform(b, true)).toEqual(expectedAPriority);
-      expect(b.transform(a, true)).toEqual(expectedBPriority);
-    });
-
-    it('transforms without priority', function () {
-      expect(a.transform(b, false)).toEqual(expectedAWithout);
-      expect(b.transform(a, false)).toEqual(expectedBWithout);
+    it('transforms', function () {
+      expect(a.transform(b, true)).toEqual(b_a);
+      expect(b.transform(a, true)).toEqual(a_b);
+      expect(a.transform(b, false)).toEqual(b_b);
+      expect(b.transform(a, false)).toEqual(a_a);
     });
 
     it('compose + transform with A priority', function () {
@@ -119,8 +113,8 @@ describe('validated detections', function () {
       const final = new Delta()
         .insert('AB')
         .insert('CD', { detectionId: '123' });
-      expect(doc.compose(a).compose(expectedAPriority)).toEqual(final);
-      expect(doc.compose(b).compose(expectedBWithout)).toEqual(final);
+      expect(doc.compose(a).compose(b_a)).toEqual(final);
+      expect(doc.compose(b).compose(a_a)).toEqual(final);
     });
 
     it('compose + transform with B Priority', function () {
@@ -128,8 +122,8 @@ describe('validated detections', function () {
       const final = new Delta()
         .insert('ABC', { detectionId: '234' })
         .insert('D');
-      expect(doc.compose(a).compose(expectedAWithout)).toEqual(final);
-      expect(doc.compose(b).compose(expectedBPriority)).toEqual(final);
+      expect(doc.compose(a).compose(b_b)).toEqual(final);
+      expect(doc.compose(b).compose(a_b)).toEqual(final);
     });
   });
 
@@ -137,26 +131,19 @@ describe('validated detections', function () {
     var a = new Delta().retain(3, { detectionId: null });
     var b = new Delta().retain(1).retain(4, { detectionId: '123' });
 
-    // var expectedAPriority = new Delta().retain(3).retain(2, { detectionId: '123' }); // original
-    // var expectedAPriority = new Delta().retain(5); // modified without chop
-    var expectedAPriority = new Delta();
-    var expectedBPriority = new Delta().retain(1, { detectionId: null }); // same as original
+    var a_a = new Delta().retain(3, { detectionId: null });
+    var a_b = new Delta().retain(1, { detectionId: null });
 
-    var expectedAWithout = new Delta()
-      .retain(1)
-      .retain(4, { detectionId: '123' });
-    var expectedBWithout = new Delta().retain(3, {
-      detectionId: null,
-    });
+    var b_b = new Delta().retain(1).retain(4, { detectionId: '123' });
+    // var b_a = new Delta().retain(3).retain(1, { detectionId: '123' }); // original
+    // var b_a = new Delta().retain(3).retain(1); // modified
+    var b_a = new Delta(); // chop
 
-    it('transforms with priority', function () {
-      expect(a.transform(b, true)).toEqual(expectedAPriority);
-      expect(b.transform(a, true)).toEqual(expectedBPriority);
-    });
-
-    it('transforms without priority', function () {
-      expect(a.transform(b, false)).toEqual(expectedAWithout);
-      expect(b.transform(a, false)).toEqual(expectedBWithout);
+    it('transforms', function () {
+      expect(a.transform(b, true)).toEqual(b_a);
+      expect(b.transform(a, true)).toEqual(a_b);
+      expect(a.transform(b, false)).toEqual(b_b);
+      expect(b.transform(a, false)).toEqual(a_a);
     });
 
     it('compose + transform with A priority', function () {
@@ -164,8 +151,8 @@ describe('validated detections', function () {
         .insert('ABC', { detectionId: '234' })
         .insert('DE');
       const final = new Delta().insert('ABCDE');
-      expect(doc.compose(a).compose(expectedAPriority)).toEqual(final);
-      expect(doc.compose(b).compose(expectedBWithout)).toEqual(final);
+      expect(doc.compose(a).compose(b_a)).toEqual(final);
+      expect(doc.compose(b).compose(a_a)).toEqual(final);
     });
 
     it('compose + transform with B Priority', function () {
@@ -175,8 +162,8 @@ describe('validated detections', function () {
       const final = new Delta()
         .insert('A')
         .insert('BCDE', { detectionId: '123' });
-      expect(doc.compose(a).compose(expectedAWithout)).toEqual(final);
-      expect(doc.compose(b).compose(expectedBPriority)).toEqual(final);
+      expect(doc.compose(a).compose(b_b)).toEqual(final);
+      expect(doc.compose(b).compose(a_b)).toEqual(final);
     });
   });
 
@@ -184,23 +171,23 @@ describe('validated detections', function () {
     var a = new Delta().retain(3, { detectionId: null });
     var b = new Delta().delete(1);
 
-    var expectedA = new Delta().delete(1);
-    var expectedB = new Delta().retain(2, { detectionId: null });
+    var a_ = new Delta().retain(2, { detectionId: null });
+    var b_ = new Delta().delete(1);
 
     it('transforms', function () {
-      expect(a.transform(b, true)).toEqual(expectedA);
-      expect(b.transform(a, true)).toEqual(expectedB);
-      expect(a.transform(b, false)).toEqual(expectedA);
-      expect(b.transform(a, false)).toEqual(expectedB);
+      expect(a.transform(b, true)).toEqual(b_);
+      expect(b.transform(a, true)).toEqual(a_);
+      expect(a.transform(b, false)).toEqual(b_);
+      expect(b.transform(a, false)).toEqual(a_);
     });
 
     it('compose + transform', function () {
       const doc = new Delta().insert('ABC', { detectionId: '123' });
       const final = new Delta().insert('BC');
-      expect(doc.compose(a).compose(expectedA, true)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, false)).toEqual(final);
-      expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
+      expect(doc.compose(a).compose(b_, true)).toEqual(final);
+      expect(doc.compose(b).compose(a_, false)).toEqual(final);
+      expect(doc.compose(a).compose(b_, false)).toEqual(final);
+      expect(doc.compose(b).compose(a_, true)).toEqual(final);
     });
   });
 
@@ -208,23 +195,23 @@ describe('validated detections', function () {
     var a = new Delta().retain(3, { detectionId: null });
     var b = new Delta().insert('X');
 
-    var expectedA = new Delta().insert('X');
-    var expectedB = new Delta().retain(1).retain(3, { detectionId: null });
+    var a_ = new Delta().retain(1).retain(3, { detectionId: null });
+    var b_ = new Delta().insert('X');
 
     it('transforms', function () {
-      expect(a.transform(b, true)).toEqual(expectedA);
-      expect(b.transform(a, true)).toEqual(expectedB);
-      expect(a.transform(b, false)).toEqual(expectedA);
-      expect(b.transform(a, false)).toEqual(expectedB);
+      expect(a.transform(b, true)).toEqual(b_);
+      expect(b.transform(a, true)).toEqual(a_);
+      expect(a.transform(b, false)).toEqual(b_);
+      expect(b.transform(a, false)).toEqual(a_);
     });
 
     it('compose + transform', function () {
       const doc = new Delta().insert('ABC', { detectionId: '123' });
       const final = new Delta().insert('XABC');
-      expect(doc.compose(a).compose(expectedA, true)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, false)).toEqual(final);
-      expect(doc.compose(a).compose(expectedA, false)).toEqual(final);
-      expect(doc.compose(b).compose(expectedB, true)).toEqual(final);
+      expect(doc.compose(a).compose(b_, true)).toEqual(final);
+      expect(doc.compose(b).compose(a_, false)).toEqual(final);
+      expect(doc.compose(a).compose(b_, false)).toEqual(final);
+      expect(doc.compose(b).compose(a_, true)).toEqual(final);
     });
   });
 
