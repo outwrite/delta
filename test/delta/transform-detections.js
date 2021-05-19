@@ -215,6 +215,48 @@ describe('validated detections', function () {
     });
   });
 
+  describe('retain + retain & delete (need to null)', function () {
+    var a = new Delta()
+      .retain(1, { detectionId: '123' })
+      .delete(1)
+      .retain(1, { detectionId: '123' });
+    var b = new Delta().retain(4, { detectionId: '234' });
+
+    var a_a = new Delta()
+      .retain(1, { detectionId: '123' })
+      .delete(1)
+      .retain(1, { detectionId: '123' });
+    var a_b = new Delta().retain(1).delete(1);
+
+    // var b_b = new Delta().retain(4, { detectionId: '234' }); // original
+    // var b_b = new Delta().retain(2, { detectionId: null }).retain(2); // modified
+    var b_b = new Delta().retain(2, { detectionId: null }); // chop
+    var b_a = new Delta();
+
+    it('transforms', function () {
+      expect(a.transform(b, true)).toEqual(b_a);
+      expect(b.transform(a, true)).toEqual(a_b);
+      expect(a.transform(b, false)).toEqual(b_b);
+      expect(b.transform(a, false)).toEqual(a_a);
+    });
+
+    it('compose + transform with A priority', function () {
+      const doc = new Delta().insert('ABCDE');
+      const final = new Delta()
+        .insert('AC', { detectionId: '123' })
+        .insert('DE');
+      expect(doc.compose(a).compose(b_a)).toEqual(final);
+      expect(doc.compose(b).compose(a_a)).toEqual(final);
+    });
+
+    it('compose + transform with B Priority', function () {
+      const doc = new Delta().insert('ABCDE');
+      const final = new Delta().insert('ACDE');
+      expect(doc.compose(a).compose(b_b)).toEqual(final);
+      expect(doc.compose(b).compose(a_b)).toEqual(final);
+    });
+  });
+
   it('sdasd', function () {
     const sop = new Delta([
       { insert: 'He' },
