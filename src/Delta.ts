@@ -12,6 +12,7 @@ interface AttributeMarker {
   end: number;
   opLength: number | null;
   thisOrOther: boolean;
+  replaces?: string | null;
 }
 
 interface DetectionMap {
@@ -758,6 +759,18 @@ class Delta {
         const op = thisIter.next();
         const length = Op.length(op);
 
+        if (op.attributes?.detectionId) {
+          if (!detectionMap[op.attributes.detectionId]) {
+            detectionMap[op.attributes.detectionId] = [];
+          }
+          detectionMap[op.attributes.detectionId].push({
+            start: runningCursor,
+            end: runningCursor + length,
+            opLength: delta.length(),
+            thisOrOther: true,
+          });
+        }
+
         delta.retain(length);
 
         runningCursor += length;
@@ -802,7 +815,6 @@ class Delta {
           continue;
         } else if (otherOp.delete) {
           delta.push(otherOp);
-          runningCursor -= length;
         } else {
           // We retain either their retain or insert
           const attributes = AttributeMap.transform(
@@ -819,10 +831,32 @@ class Delta {
               start: runningCursor,
               end: runningCursor + length,
               opLength:
-                typeof attributes?.detectionId === 'undefined'
-                  ? null
-                  : delta.length(),
+                typeof attributes?.detectionId !== 'undefined'
+                  ? delta.length()
+                  : null,
+              replaces:
+                typeof attributes?.detectionId !== 'undefined'
+                  ? thisOp.attributes?.detectionId
+                  : undefined,
               thisOrOther: false,
+            });
+          }
+          if (thisOp.attributes?.detectionId) {
+            if (!detectionMap[thisOp.attributes.detectionId]) {
+              detectionMap[thisOp.attributes.detectionId] = [];
+            }
+            detectionMap[thisOp.attributes.detectionId].push({
+              start: runningCursor,
+              end: runningCursor + length,
+              opLength:
+                typeof attributes?.detectionId === 'undefined'
+                  ? delta.length()
+                  : null,
+              replaces:
+                typeof attributes?.detectionId === 'undefined'
+                  ? otherOp.attributes?.detectionId
+                  : undefined,
+              thisOrOther: true,
             });
           }
           delta.retain(length, attributes);
@@ -836,52 +870,81 @@ class Delta {
     if (toReplace.length > 0) {
       const newDelta = new Delta();
       const iter = Op.iterator(cloneDeep(delta.ops));
-      toReplace.forEach(({ start, end, opLength, detId }) => {
-        while (
-          !(
-            newDelta.length() <= opLength &&
-            opLength < newDelta.length() + iter.peekLength()
-          )
-        ) {
-          newDelta.push(iter.next());
-          if (!iter.hasNext()) {
-            throw Error('Iter has no next!');
-          }
-        }
-
-        const offset = opLength - newDelta.length();
-        if (offset > 0) {
-          newDelta.push(iter.next(offset));
-        }
-
-        let lengthToChange = end - start;
-        while (lengthToChange > 0) {
-          const length = Math.min(iter.peekLength(), lengthToChange);
-          const op = iter.next(length);
-          if (typeof op.delete === 'number') {
-            throw Error('delete should never be here...');
+      toReplace.forEach(
+        ({ start, end, opLength, detId, replaces, thisOrOther }) => {
+          while (
+            !(
+              newDelta.length() <= opLength &&
+              opLength < newDelta.length() + iter.peekLength()
+            )
+          ) {
+            newDelta.push(iter.next());
+            if (!iter.hasNext()) {
+              throw Error('Iter has no next!');
+            }
           }
 
-          const attr = cloneDeep(op.attributes);
-          if (attr?.detectionId === detId) {
-            delete attr['detectionId'];
-          } else if (attr) {
-            console.warn(
-              `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-            );
-            delete attr['detectionId'];
-          }
-          if (typeof op.retain === 'number') {
-            newDelta.retain(op.retain, attr);
-          } else if (op.insert) {
-            newDelta.insert(op.insert, attr);
-          } else {
-            throw Error('invalid operation');
+          const offset = opLength - newDelta.length();
+          if (offset > 0) {
+            newDelta.push(iter.next(offset));
           }
 
-          lengthToChange -= length;
-        }
-      });
+          let lengthToChange = end - start;
+          while (lengthToChange > 0) {
+            const length = Math.min(iter.peekLength(), lengthToChange);
+            const op = iter.next(length);
+            if (typeof op.delete === 'number') {
+              throw Error('delete should never be here...');
+            }
+
+            let attr = cloneDeep(op.attributes);
+
+            // We should null if this current detection A is from the other iterator,
+            //  and it replaces detection B from this iterator.
+            // This is because when transformed the other way, A would still replace B
+            //  but A would still get deleted, leaving no detection
+            const shouldNull = !thisOrOther && typeof replaces === 'string';
+            if (shouldNull) {
+              if (!thisOrOther && attr?.detectionId !== detId) {
+                console.warn(
+                  `other - detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                );
+              } else if (
+                thisOrOther &&
+                typeof attr?.detectionId !== 'undefined'
+              ) {
+                console.warn(
+                  `this - detectionId not undefined....${attr?.detectionId} vs ${detId}`,
+                );
+              }
+              attr = { ...attr, detectionId: null };
+            } else if (attr) {
+              if (!thisOrOther && attr?.detectionId !== detId) {
+                console.warn(
+                  `other - detectionId not the same....${attr?.detectionId} vs ${detId}`,
+                );
+              } else if (
+                thisOrOther &&
+                typeof attr?.detectionId !== 'undefined'
+              ) {
+                console.warn(
+                  `this - detectionId not undefined....${attr?.detectionId} vs ${detId}`,
+                );
+              }
+              delete attr['detectionId'];
+            }
+            if (typeof op.retain === 'number') {
+              newDelta.retain(op.retain, attr);
+            } else if (op.insert) {
+              newDelta.insert(op.insert, attr);
+            } else {
+              throw Error('invalid operation');
+            }
+
+            lengthToChange -= length;
+          }
+        },
+      );
 
       // Add in the rest of the operations...
       while (iter.hasNext()) {

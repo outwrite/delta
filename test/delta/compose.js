@@ -486,6 +486,45 @@ describe('compose()', function () {
     }
   });
 
+  it('inserts take precedence over deletes if there are at the same index', () => {
+    const thisOp = new Delta([
+      { retain: 2, attributes: { color: 'purple', font: null } },
+      {
+        retain: 1,
+        attributes: { font: 'serif', detectionId: null, color: 'purple' },
+      },
+      { retain: 1, attributes: { color: 'purple', font: null } },
+      { delete: 1 },
+      { retain: 1 },
+      {
+        retain: 2,
+        attributes: { color: 'purple', font: 'serif', italic: null },
+      },
+      { insert: 'his' },
+      { retain: 1 },
+      {
+        attributes: { detectionId: 'c2e6a141-8092-4e65-97ed-3bef0d5eced2' },
+        insert: 'took',
+      },
+      {
+        attributes: {
+          color: 'purple',
+          detectionId: '4dd308e1-e022-4806-b071-8152976018c4',
+        },
+        insert: 'that',
+      },
+    ]);
+    const otherOp = new Delta([
+      { retain: 2 },
+      { retain: 4, attributes: { bold: null, italic: null } },
+      { retain: 2 },
+      { delete: 3 },
+      { retain: 2 },
+      { delete: 4 },
+    ]);
+    thisOp.compose(otherOp);
+  });
+
   it('b', () => {
     const ops = [
       new Delta([
