@@ -1,5 +1,4 @@
 import diff from 'fast-diff';
-import partition from 'lodash.partition';
 import cloneDeep from 'lodash.clonedeep';
 import isEqual from 'lodash.isequal';
 import AttributeMap from './AttributeMap';
@@ -7,82 +6,39 @@ import Op from './Op';
 
 const NULL_CHARACTER = String.fromCharCode(0); // Placeholder char for embed in diff()
 
-interface AttributeMarker {
-  start: number;
-  end: number;
-  opLength: number | null;
-  thisOrOther: boolean;
-  replaces?: string | null;
+function addMetaData(
+  op: Op,
+  thisOrOther: boolean,
+  replaces?: string | null,
+  original?: string | null,
+): Op {
+  const clone = cloneDeep(op);
+  const attr = clone.attributes || {};
+  attr.meta = { thisOrOther };
+  if (typeof replaces !== 'undefined') {
+    attr.meta.replaces = replaces;
+  }
+  if (typeof original !== 'undefined') {
+    attr.meta.original = original;
+  }
+  clone.attributes = attr;
+  return clone;
 }
 
-interface DetectionMap {
-  [detId: string]: AttributeMarker[];
-}
-
-interface AttributeReplacement extends AttributeMarker {
-  opLength: number;
-  detId: string;
-}
-
-function filterInvalidDetections(
-  detectionMap: DetectionMap,
-): [[string, 'both' | 'this' | 'other'][], AttributeReplacement[]] {
-  const toRemove = Object.keys(detectionMap).reduce<
-    Array<[string, 'both' | 'this' | 'other']>
-  >((list, detId) => {
-    const sorted = detectionMap[detId].sort((a, b) => a.start - b.start);
-
-    let lastRange: { start: number; end: number } | null = null;
-    const isNotAdjacent = sorted.some(({ start, end, opLength }) => {
-      if (opLength === null) return false; // dont consider already deleted ones...
-      if (lastRange === null) {
-        lastRange = { start, end };
-      } else if (lastRange.end < start) {
-        return true;
-      } else {
-        lastRange = { start, end };
-      }
-      return false;
-    });
-
-    if (isNotAdjacent) {
-      list.push([detId, 'both']);
-      return list;
-    }
-
-    const [thisValues, otherValues] = partition(
-      detectionMap[detId],
-      ({ thisOrOther }) => thisOrOther,
-    );
-    const removeThis = thisValues.some(({ opLength }) => opLength === null);
-    const removeOther = otherValues.some(({ opLength }) => opLength === null);
-    if (removeThis && removeOther) {
-      list.push([detId, 'both']);
-    } else if (removeThis) {
-      list.push([detId, 'this']);
-    } else if (removeOther) {
-      list.push([detId, 'other']);
-    }
-
-    return list;
-  }, []);
-
-  let toReplace: AttributeReplacement[] = [];
-  toRemove.forEach(([detId, option]) => {
-    toReplace = [
-      ...toReplace,
-      ...(detectionMap[detId].filter(
-        ({ opLength, thisOrOther }) =>
-          opLength !== null &&
-          (option === 'both'
-            ? true
-            : option === 'this'
-            ? thisOrOther
-            : !thisOrOther),
-      ) as Array<AttributeReplacement>).map((value) => ({ ...value, detId })),
-    ];
-  });
-  return [toRemove, toReplace.sort((a, b) => a.opLength - b.opLength)];
+function addMetaDataAttribute(
+  attributes: AttributeMap | undefined = {},
+  thisOrOther: boolean,
+  replaces?: string | null,
+  original?: string | null,
+): AttributeMap {
+  attributes = { ...attributes, meta: { thisOrOther } };
+  if (typeof replaces !== 'undefined') {
+    attributes.meta.replaces = replaces;
+  }
+  if (typeof original !== 'undefined') {
+    attributes.meta.original = original;
+  }
+  return attributes;
 }
 
 class Delta {
@@ -267,7 +223,11 @@ class Delta {
     const otherIter = Op.iterator(other.ops);
 
     let runningCursor = 0;
-    const attributeMarker: { [id: string]: Array<AttributeMarker> } = {};
+    const attributeMarker: {
+      [id: string]: { start: number; end: number };
+    } = {};
+    const toRemove: { [id: string]: { this: boolean; other: boolean } } = {};
+
     const ops = [];
     const firstOther = otherIter.peek();
     if (
@@ -284,17 +244,27 @@ class Delta {
         firstLeft -= length;
         const op = thisIter.next();
         if (op.attributes?.detectionId) {
-          if (!attributeMarker[op.attributes.detectionId]) {
-            attributeMarker[op.attributes.detectionId] = [];
+          if (
+            toRemove[op.attributes.detectionId] &&
+            toRemove[op.attributes.detectionId].this &&
+            toRemove[op.attributes.detectionId].other
+          ) {
+            // do nothing...
+          } else {
+            const thisEntry = {
+              start: runningCursor,
+              end: runningCursor + length,
+            };
+            const lastEntry = attributeMarker[op.attributes.detectionId];
+            if (lastEntry && lastEntry.end < thisEntry.start) {
+              toRemove[op.attributes.detectionId] = { this: true, other: true };
+              delete attributeMarker[op.attributes.detectionId];
+            } else {
+              attributeMarker[op.attributes.detectionId] = thisEntry;
+            }
           }
-          attributeMarker[op.attributes.detectionId].push({
-            start: runningCursor,
-            end: runningCursor + length,
-            opLength: runningCursor,
-            thisOrOther: true,
-          });
         }
-        ops.push(op);
+        ops.push(op.attributes?.detectionId ? addMetaData(op, true) : op);
         runningCursor += length;
       }
       if (firstOther.retain - firstLeft > 0) {
@@ -305,19 +275,30 @@ class Delta {
     while (thisIter.hasNext() || otherIter.hasNext()) {
       if (otherIter.peekType() === 'insert') {
         const op = otherIter.next();
+        const length = Op.length(op);
         if (op.attributes?.detectionId) {
-          if (!attributeMarker[op.attributes.detectionId]) {
-            attributeMarker[op.attributes.detectionId] = [];
+          if (
+            toRemove[op.attributes.detectionId] &&
+            toRemove[op.attributes.detectionId].this &&
+            toRemove[op.attributes.detectionId].other
+          ) {
+            // do nothing...
+          } else {
+            const thisEntry = {
+              start: runningCursor,
+              end: runningCursor + length,
+            };
+            const lastEntry = attributeMarker[op.attributes.detectionId];
+            if (lastEntry && lastEntry.end < thisEntry.start) {
+              toRemove[op.attributes.detectionId] = { this: true, other: true };
+              delete attributeMarker[op.attributes.detectionId];
+            } else {
+              attributeMarker[op.attributes.detectionId] = thisEntry;
+            }
           }
-          attributeMarker[op.attributes.detectionId].push({
-            start: runningCursor,
-            end: runningCursor + Op.length(op),
-            opLength: delta.length(),
-            thisOrOther: false,
-          });
         }
-        delta.push(op);
-        runningCursor += Op.length(op);
+        delta.push(op.attributes?.detectionId ? addMetaData(op, false) : op);
+        runningCursor += length;
       } else if (thisIter.peekType() === 'delete') {
         delta.push(thisIter.next());
       } else {
@@ -341,16 +322,25 @@ class Delta {
             newOp.attributes = attributes;
           }
           if (attributes?.detectionId) {
-            if (!attributeMarker[attributes.detectionId]) {
-              attributeMarker[attributes.detectionId] = [];
+            if (
+              toRemove[attributes.detectionId] &&
+              toRemove[attributes.detectionId].this &&
+              toRemove[attributes.detectionId].other
+            ) {
+              // do nothing...
+            } else {
+              const thisEntry = {
+                start: runningCursor,
+                end: runningCursor + length,
+              };
+              const lastEntry = attributeMarker[attributes.detectionId];
+              if (lastEntry && lastEntry.end < thisEntry.start) {
+                toRemove[attributes.detectionId] = { this: true, other: true };
+                delete attributeMarker[attributes.detectionId];
+              } else {
+                attributeMarker[attributes.detectionId] = thisEntry;
+              }
             }
-            attributeMarker[attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: delta.length(),
-              thisOrOther:
-                thisOp.attributes?.detectionId === attributes.detectionId,
-            });
 
             // One detectionId got erased!!!
             if (
@@ -358,36 +348,56 @@ class Delta {
               otherOp.attributes?.detectionId
             ) {
               const thisOrOther =
-                thisOp.attributes.detectionId !== attributes.detectionId;
-              const detId = thisOrOther
-                ? thisOp.attributes.detectionId
-                : otherOp.attributes.detectionId;
-              if (!attributeMarker[detId]) {
-                attributeMarker[detId] = [];
+                thisOp.attributes.detectionId !== attributes.detectionId
+                  ? 'this'
+                  : 'other';
+              const detId =
+                thisOrOther === 'this'
+                  ? thisOp.attributes.detectionId
+                  : otherOp.attributes.detectionId;
+
+              const removalStatus = toRemove[detId] || {
+                this: false,
+                other: false,
+              };
+              toRemove[detId] = { ...removalStatus, [thisOrOther]: true };
+              if (
+                toRemove[detId] &&
+                toRemove[detId].this &&
+                toRemove[detId].other
+              ) {
+                delete attributeMarker[detId];
               }
-              attributeMarker[detId].push({
-                start: runningCursor,
-                end: runningCursor + length,
-                opLength: null,
-                thisOrOther,
-              });
             }
           } else if (
             thisOp.attributes?.detectionId &&
             otherOp.attributes?.detectionId === null
           ) {
-            if (!attributeMarker[thisOp.attributes.detectionId]) {
-              attributeMarker[thisOp.attributes.detectionId] = [];
+            const removalStatus = toRemove[thisOp.attributes.detectionId] || {
+              this: false,
+              other: false,
+            };
+            toRemove[thisOp.attributes.detectionId] = {
+              ...removalStatus,
+              this: true,
+            };
+            if (
+              toRemove[thisOp.attributes.detectionId] &&
+              toRemove[thisOp.attributes.detectionId].this &&
+              toRemove[thisOp.attributes.detectionId].other
+            ) {
+              delete attributeMarker[thisOp.attributes.detectionId];
             }
-            attributeMarker[thisOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: null,
-              thisOrOther: true,
-            });
           }
 
-          delta.push(newOp);
+          delta.push(
+            typeof attributes?.detectionId !== 'undefined'
+              ? addMetaData(
+                  newOp,
+                  thisOp.attributes?.detectionId === attributes?.detectionId,
+                )
+              : newOp,
+          );
 
           runningCursor += length;
 
@@ -398,20 +408,11 @@ class Delta {
           ) {
             const rest = new Delta(thisIter.rest());
 
-            // Remove any detections that have been split...
-            const [detsToRemove, toReplace] = filterInvalidDetections(
-              attributeMarker,
-            );
-
-            // validate the rest....
-            const detsToRemoveForThis = detsToRemove
-              .filter(([, option]) => option === 'both' || option === 'this')
-              .map(([detId]) => detId);
-
             const validatedRest = cloneDeep(rest.ops).map((op) => {
               if (
                 op.attributes?.detectionId &&
-                detsToRemoveForThis.indexOf(op.attributes.detectionId) !== -1
+                toRemove[op.attributes.detectionId] &&
+                toRemove[op.attributes.detectionId].this
               ) {
                 const newOp = cloneDeep(op);
                 let newAttributes = newOp.attributes;
@@ -430,73 +431,42 @@ class Delta {
               }
             });
 
-            if (toReplace.length > 0) {
-              const newDelta = new Delta();
-              const iter = Op.iterator(cloneDeep(delta.ops));
-              toReplace.forEach(({ start, end, opLength, detId }) => {
-                while (
-                  !(
-                    newDelta.length() <= opLength &&
-                    opLength < newDelta.length() + iter.peekLength()
-                  )
-                ) {
-                  newDelta.push(iter.next());
-                  if (!iter.hasNext()) {
-                    throw Error('Iter has no next!');
-                  }
+            const newDelta = new Delta();
+            cloneDeep(delta.ops).forEach((op) => {
+              let attributes = op.attributes;
+              if (attributes?.detectionId) {
+                if (typeof attributes.meta === 'undefined') {
+                  throw Error(
+                    'if an attribute has a detection it should have meta info',
+                  );
                 }
+                const thisOrOther = attributes.meta.thisOrOther
+                  ? 'this'
+                  : 'other';
+                const shouldDelete =
+                  toRemove[attributes.detectionId] &&
+                  toRemove[attributes.detectionId][thisOrOther];
 
-                const offset = opLength - newDelta.length();
-                if (offset > 0) {
-                  newDelta.push(iter.next(offset));
-                }
-
-                let lengthToChange = end - start;
-                while (lengthToChange > 0) {
-                  const length = Math.min(iter.peekLength(), lengthToChange);
-                  const op = iter.next(length);
-                  if (typeof op.delete === 'number') {
-                    throw Error('delete should never be here...');
-                  }
+                if (shouldDelete) {
                   if (typeof op.retain === 'number') {
-                    // Keep nulls...
-                    let attr = op.attributes;
-                    if (attr?.detectionId === detId) {
-                      attr = { ...op.attributes, detectionId: null };
-                    } else {
-                      console.warn(
-                        `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                      );
-                      attr = { ...op.attributes, detectionId: null };
-                    }
-                    newDelta.retain(op.retain, attr);
-                  } else if (op.insert) {
-                    const attr = op.attributes;
-                    if (attr?.detectionId === detId) {
-                      delete attr['detectionId'];
-                    } else if (attr) {
-                      console.warn(
-                        `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                      );
-                      delete attr['detectionId'];
-                    }
-                    newDelta.insert(op.insert, attr);
+                    attributes = { ...op.attributes, detectionId: null };
                   } else {
-                    throw Error('not valid operation');
+                    delete attributes['detectionId'];
                   }
-                  lengthToChange -= length;
                 }
-              });
-
-              // Add in the rest of the operations...
-              while (iter.hasNext()) {
-                newDelta.push(iter.next());
               }
+              if (attributes) {
+                delete attributes['meta'];
+              }
+              if (!attributes || Object.keys(attributes).length === 0) {
+                delete op['attributes'];
+                newDelta.push({ ...op });
+              } else {
+                newDelta.push({ ...op, attributes });
+              }
+            });
 
-              return newDelta.concat(new Delta(validatedRest)).chop();
-            }
-
-            return delta.concat(new Delta(validatedRest)).chop();
+            return newDelta.concat(new Delta(validatedRest)).chop();
           }
 
           // Other op should be delete, we could be an insert or retain
@@ -506,102 +476,76 @@ class Delta {
           typeof thisOp.retain === 'number'
         ) {
           if (thisOp.attributes?.detectionId) {
-            if (!attributeMarker[thisOp.attributes.detectionId]) {
-              attributeMarker[thisOp.attributes.detectionId] = [];
+            const removalStatus = toRemove[thisOp.attributes.detectionId] || {
+              this: false,
+              other: false,
+            };
+            toRemove[thisOp.attributes.detectionId] = {
+              ...removalStatus,
+              this: true,
+            };
+            if (
+              toRemove[thisOp.attributes.detectionId] &&
+              toRemove[thisOp.attributes.detectionId].this &&
+              toRemove[thisOp.attributes.detectionId].other
+            ) {
+              delete attributeMarker[thisOp.attributes.detectionId];
             }
-            attributeMarker[thisOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: null,
-              thisOrOther: true,
-            });
           }
           delta.push(otherOp);
         } else {
           if (thisOp.attributes?.detectionId) {
-            if (!attributeMarker[thisOp.attributes.detectionId]) {
-              attributeMarker[thisOp.attributes.detectionId] = [];
+            const removalStatus = toRemove[thisOp.attributes.detectionId] || {
+              this: false,
+              other: false,
+            };
+            toRemove[thisOp.attributes.detectionId] = {
+              ...removalStatus,
+              this: true,
+            };
+            if (
+              toRemove[thisOp.attributes.detectionId] &&
+              toRemove[thisOp.attributes.detectionId].this &&
+              toRemove[thisOp.attributes.detectionId].other
+            ) {
+              delete attributeMarker[thisOp.attributes.detectionId];
             }
-            attributeMarker[thisOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: null,
-              thisOrOther: true,
-            });
           }
         }
       }
     }
 
-    // Remove any detections that have been split...
-    const [, toReplace] = filterInvalidDetections(attributeMarker);
+    const newDelta = new Delta();
+    cloneDeep(delta.ops).forEach((op) => {
+      let attributes = op.attributes;
+      if (
+        attributes?.detectionId &&
+        typeof attributes.meta.thisOrOther !== 'undefined'
+      ) {
+        const thisOrOther = attributes.meta.thisOrOther ? 'this' : 'other';
+        const shouldDelete =
+          toRemove[attributes.detectionId] &&
+          toRemove[attributes.detectionId][thisOrOther];
 
-    if (toReplace.length > 0) {
-      const newDelta = new Delta();
-      const iter = Op.iterator(cloneDeep(delta.ops));
-      toReplace.forEach(({ start, end, opLength, detId }) => {
-        while (
-          !(
-            newDelta.length() <= opLength &&
-            opLength < newDelta.length() + iter.peekLength()
-          )
-        ) {
-          newDelta.push(iter.next());
-          if (!iter.hasNext()) {
-            throw Error('Iter has no next!');
-          }
-        }
-
-        const offset = opLength - newDelta.length();
-        if (offset > 0) {
-          newDelta.push(iter.next(offset));
-        }
-
-        let lengthToChange = end - start;
-        while (lengthToChange > 0) {
-          const length = Math.min(iter.peekLength(), lengthToChange);
-          const op = iter.next(length);
-          if (typeof op.delete === 'number') {
-            throw Error('delete should never be here...');
-          }
+        if (shouldDelete) {
           if (typeof op.retain === 'number') {
-            // Keep nulls...
-            let attr = op.attributes;
-            if (attr?.detectionId === detId) {
-              attr = { ...op.attributes, detectionId: null };
-            } else {
-              console.warn(
-                `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-              );
-              attr = { ...op.attributes, detectionId: null };
-            }
-            newDelta.retain(op.retain, attr);
-          } else if (op.insert) {
-            const attr = op.attributes;
-            if (attr?.detectionId === detId) {
-              delete attr['detectionId'];
-            } else if (attr) {
-              console.warn(
-                `detectionId not the same....${attr?.detectionId} vs ${detId}`,
-              );
-              delete attr['detectionId'];
-            }
-            newDelta.insert(op.insert, attr);
+            attributes = { ...op.attributes, detectionId: null };
           } else {
-            throw Error('not valid operation');
+            delete attributes['detectionId'];
           }
-          lengthToChange -= length;
         }
-      });
-
-      // Add in the rest of the operations...
-      while (iter.hasNext()) {
-        newDelta.push(iter.next());
       }
-      return newDelta.chop();
-    }
-
-    return delta.chop();
+      if (attributes) {
+        delete attributes['meta'];
+      }
+      if (!attributes || Object.keys(attributes).length === 0) {
+        delete op['attributes'];
+        newDelta.push({ ...op });
+      } else {
+        newDelta.push({ ...op, attributes });
+      }
+    });
+    return newDelta.chop();
   }
 
   concat(other: Delta): Delta {
@@ -749,7 +693,10 @@ class Delta {
     const delta = new Delta();
 
     let runningCursor = 0;
-    const detectionMap: DetectionMap = {};
+    const attributeMarker: {
+      [id: string]: { start: number; end: number };
+    } = {};
+    const toRemove: { [id: string]: { this: boolean; other: boolean } } = {};
 
     while (thisIter.hasNext() || otherIter.hasNext()) {
       if (
@@ -760,18 +707,36 @@ class Delta {
         const length = Op.length(op);
 
         if (op.attributes?.detectionId) {
-          if (!detectionMap[op.attributes.detectionId]) {
-            detectionMap[op.attributes.detectionId] = [];
+          if (
+            toRemove[op.attributes.detectionId] &&
+            toRemove[op.attributes.detectionId].this &&
+            toRemove[op.attributes.detectionId].other
+          ) {
+            // do nothing...
+          } else {
+            const thisEntry = {
+              start: runningCursor,
+              end: runningCursor + length,
+            };
+            const lastEntry = attributeMarker[op.attributes.detectionId];
+            if (lastEntry && lastEntry.end < thisEntry.start) {
+              toRemove[op.attributes.detectionId] = { this: true, other: true };
+              delete attributeMarker[op.attributes.detectionId];
+            } else {
+              attributeMarker[op.attributes.detectionId] = thisEntry;
+            }
           }
-          detectionMap[op.attributes.detectionId].push({
-            start: runningCursor,
-            end: runningCursor + length,
-            opLength: delta.length(),
-            thisOrOther: true,
-          });
         }
 
-        delta.retain(length);
+        delta.retain(
+          length,
+          addMetaDataAttribute(
+            undefined,
+            true,
+            undefined,
+            op.attributes?.detectionId,
+          ),
+        );
 
         runningCursor += length;
       } else if (otherIter.peekType() === 'insert') {
@@ -779,18 +744,28 @@ class Delta {
         const length = Op.length(op);
 
         if (op.attributes?.detectionId) {
-          if (!detectionMap[op.attributes.detectionId]) {
-            detectionMap[op.attributes.detectionId] = [];
+          if (
+            toRemove[op.attributes.detectionId] &&
+            toRemove[op.attributes.detectionId].this &&
+            toRemove[op.attributes.detectionId].other
+          ) {
+            // do nothing...
+          } else {
+            const thisEntry = {
+              start: runningCursor,
+              end: runningCursor + length,
+            };
+            const lastEntry = attributeMarker[op.attributes.detectionId];
+            if (lastEntry && lastEntry.end < thisEntry.start) {
+              toRemove[op.attributes.detectionId] = { this: true, other: true };
+              delete attributeMarker[op.attributes.detectionId];
+            } else {
+              attributeMarker[op.attributes.detectionId] = thisEntry;
+            }
           }
-          detectionMap[op.attributes.detectionId].push({
-            start: runningCursor,
-            end: runningCursor + length,
-            opLength: delta.length(),
-            thisOrOther: false,
-          });
         }
 
-        delta.push(op);
+        delta.push(op.attributes?.detectionId ? addMetaData(op, false) : op);
 
         runningCursor += length;
       } else {
@@ -800,65 +775,161 @@ class Delta {
 
         if (thisOp.delete) {
           if (otherOp.attributes?.detectionId) {
-            if (!detectionMap[otherOp.attributes.detectionId]) {
-              detectionMap[otherOp.attributes.detectionId] = [];
+            const removalStatus = toRemove[otherOp.attributes.detectionId] || {
+              this: false,
+              other: false,
+            };
+            toRemove[otherOp.attributes.detectionId] = {
+              ...removalStatus,
+              other: true,
+            };
+            if (
+              toRemove[otherOp.attributes.detectionId] &&
+              toRemove[otherOp.attributes.detectionId].this &&
+              toRemove[otherOp.attributes.detectionId].other
+            ) {
+              delete attributeMarker[otherOp.attributes.detectionId];
             }
-            detectionMap[otherOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength: null,
-              thisOrOther: false,
-            });
           }
 
           // Our delete either makes their delete redundant or removes their retain
           continue;
         } else if (otherOp.delete) {
+          if (thisOp.attributes?.detectionId) {
+            const removalStatus = toRemove[thisOp.attributes.detectionId] || {
+              this: false,
+              other: false,
+            };
+            toRemove[thisOp.attributes.detectionId] = {
+              ...removalStatus,
+              this: true,
+            };
+            if (
+              toRemove[thisOp.attributes.detectionId] &&
+              toRemove[thisOp.attributes.detectionId].this &&
+              toRemove[thisOp.attributes.detectionId].other
+            ) {
+              delete attributeMarker[thisOp.attributes.detectionId];
+            }
+          }
+
           delta.push(otherOp);
         } else {
           // We retain either their retain or insert
-          const attributes = AttributeMap.transform(
+          let attributes = AttributeMap.transform(
             thisOp.attributes,
             otherOp.attributes,
             priority,
           );
 
-          if (otherOp.attributes?.detectionId) {
-            if (!detectionMap[otherOp.attributes.detectionId]) {
-              detectionMap[otherOp.attributes.detectionId] = [];
+          if (typeof attributes?.detectionId === 'undefined') {
+            if (typeof thisOp.attributes?.detectionId !== 'undefined') {
+              if (
+                toRemove[thisOp.attributes.detectionId] &&
+                toRemove[thisOp.attributes.detectionId].this &&
+                toRemove[thisOp.attributes.detectionId].other
+              ) {
+                // do nothing...
+              } else {
+                const thisEntry = {
+                  start: runningCursor,
+                  end: runningCursor + length,
+                };
+                const lastEntry =
+                  attributeMarker[thisOp.attributes.detectionId];
+                if (lastEntry && lastEntry.end < thisEntry.start) {
+                  toRemove[thisOp.attributes.detectionId] = {
+                    this: true,
+                    other: true,
+                  };
+                  delete attributeMarker[thisOp.attributes.detectionId];
+                } else {
+                  attributeMarker[thisOp.attributes.detectionId] = thisEntry;
+                }
+              }
+
+              if (otherOp.attributes?.detectionId) {
+                const removalStatus = toRemove[
+                  otherOp.attributes.detectionId
+                ] || {
+                  this: false,
+                  other: false,
+                };
+                toRemove[otherOp.attributes.detectionId] = {
+                  ...removalStatus,
+                  other: true,
+                };
+                if (
+                  toRemove[otherOp.attributes.detectionId] &&
+                  toRemove[otherOp.attributes.detectionId].this &&
+                  toRemove[otherOp.attributes.detectionId].other
+                ) {
+                  delete attributeMarker[otherOp.attributes.detectionId];
+                }
+              }
+
+              attributes = addMetaDataAttribute(
+                attributes,
+                true,
+                otherOp.attributes?.detectionId,
+                thisOp.attributes?.detectionId,
+              );
+            } else {
+              /// doest have a detection
             }
-            detectionMap[otherOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength:
-                typeof attributes?.detectionId !== 'undefined'
-                  ? delta.length()
-                  : null,
-              replaces:
-                typeof attributes?.detectionId !== 'undefined'
-                  ? thisOp.attributes?.detectionId
-                  : undefined,
-              thisOrOther: false,
-            });
-          }
-          if (thisOp.attributes?.detectionId) {
-            if (!detectionMap[thisOp.attributes.detectionId]) {
-              detectionMap[thisOp.attributes.detectionId] = [];
+          } else {
+            // detection from other
+            if (otherOp.attributes?.detectionId) {
+              if (
+                toRemove[otherOp.attributes.detectionId] &&
+                toRemove[otherOp.attributes.detectionId].this &&
+                toRemove[otherOp.attributes.detectionId].other
+              ) {
+                // do nothing...
+              } else {
+                const thisEntry = {
+                  start: runningCursor,
+                  end: runningCursor + length,
+                };
+                const lastEntry =
+                  attributeMarker[otherOp.attributes.detectionId];
+                if (lastEntry && lastEntry.end < thisEntry.start) {
+                  toRemove[otherOp.attributes.detectionId] = {
+                    this: true,
+                    other: true,
+                  };
+                  delete attributeMarker[otherOp.attributes.detectionId];
+                } else {
+                  attributeMarker[otherOp.attributes.detectionId] = thisEntry;
+                }
+              }
             }
-            detectionMap[thisOp.attributes.detectionId].push({
-              start: runningCursor,
-              end: runningCursor + length,
-              opLength:
-                typeof attributes?.detectionId === 'undefined'
-                  ? delta.length()
-                  : null,
-              replaces:
-                typeof attributes?.detectionId === 'undefined'
-                  ? otherOp.attributes?.detectionId
-                  : undefined,
-              thisOrOther: true,
-            });
+
+            if (thisOp.attributes?.detectionId) {
+              const removalStatus = toRemove[thisOp.attributes.detectionId] || {
+                this: false,
+                other: false,
+              };
+              toRemove[thisOp.attributes.detectionId] = {
+                ...removalStatus,
+                this: true,
+              };
+              if (
+                toRemove[thisOp.attributes.detectionId] &&
+                toRemove[thisOp.attributes.detectionId].this &&
+                toRemove[thisOp.attributes.detectionId].other
+              ) {
+                delete attributeMarker[thisOp.attributes.detectionId];
+              }
+            }
+
+            attributes = addMetaDataAttribute(
+              attributes,
+              false,
+              thisOp.attributes?.detectionId,
+            );
           }
+
           delta.retain(length, attributes);
 
           runningCursor += length;
@@ -866,94 +937,45 @@ class Delta {
       }
     }
 
-    const [, toReplace] = filterInvalidDetections(detectionMap);
-    if (toReplace.length > 0) {
-      const newDelta = new Delta();
-      const iter = Op.iterator(cloneDeep(delta.ops));
-      toReplace.forEach(
-        ({ start, end, opLength, detId, replaces, thisOrOther }) => {
-          while (
-            !(
-              newDelta.length() <= opLength &&
-              opLength < newDelta.length() + iter.peekLength()
-            )
-          ) {
-            newDelta.push(iter.next());
-            if (!iter.hasNext()) {
-              throw Error('Iter has no next!');
-            }
+    const newDelta = new Delta();
+    cloneDeep(delta.ops).forEach((op) => {
+      let attributes = op.attributes;
+      const detectionId = attributes?.detectionId || attributes?.meta?.original;
+
+      if (detectionId) {
+        if (typeof attributes?.meta === 'undefined') {
+          throw Error(
+            'if an attribute has a detection it should have meta info',
+          );
+        }
+        const thisOrOther = attributes.meta.thisOrOther ? 'this' : 'other';
+        const shouldDelete =
+          toRemove[detectionId] && toRemove[detectionId][thisOrOther];
+        if (shouldDelete) {
+          const shouldNull =
+            thisOrOther === 'other' &&
+            typeof attributes.meta.replaces === 'string';
+          if (shouldNull) {
+            attributes = { ...op.attributes, detectionId: null };
+          } else {
+            delete attributes['detectionId'];
           }
-
-          const offset = opLength - newDelta.length();
-          if (offset > 0) {
-            newDelta.push(iter.next(offset));
-          }
-
-          let lengthToChange = end - start;
-          while (lengthToChange > 0) {
-            const length = Math.min(iter.peekLength(), lengthToChange);
-            const op = iter.next(length);
-            if (typeof op.delete === 'number') {
-              throw Error('delete should never be here...');
-            }
-
-            let attr = cloneDeep(op.attributes);
-
-            // We should null if this current detection A is from the other iterator,
-            //  and it replaces detection B from this iterator.
-            // This is because when transformed the other way, A would still replace B
-            //  but A would still get deleted, leaving no detection
-            const shouldNull = !thisOrOther && typeof replaces === 'string';
-            if (shouldNull) {
-              if (!thisOrOther && attr?.detectionId !== detId) {
-                console.warn(
-                  `other - detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                );
-              } else if (
-                thisOrOther &&
-                typeof attr?.detectionId !== 'undefined'
-              ) {
-                console.warn(
-                  `this - detectionId not undefined....${attr?.detectionId} vs ${detId}`,
-                );
-              }
-              attr = { ...attr, detectionId: null };
-            } else if (attr) {
-              if (!thisOrOther && attr?.detectionId !== detId) {
-                console.warn(
-                  `other - detectionId not the same....${attr?.detectionId} vs ${detId}`,
-                );
-              } else if (
-                thisOrOther &&
-                typeof attr?.detectionId !== 'undefined'
-              ) {
-                console.warn(
-                  `this - detectionId not undefined....${attr?.detectionId} vs ${detId}`,
-                );
-              }
-              delete attr['detectionId'];
-            }
-            if (typeof op.retain === 'number') {
-              newDelta.retain(op.retain, attr);
-            } else if (op.insert) {
-              newDelta.insert(op.insert, attr);
-            } else {
-              throw Error('invalid operation');
-            }
-
-            lengthToChange -= length;
-          }
-        },
-      );
-
-      // Add in the rest of the operations...
-      while (iter.hasNext()) {
-        newDelta.push(iter.next());
+        }
       }
-      return newDelta.chop();
-    }
 
-    return delta.chop();
+      if (attributes) {
+        delete attributes['meta'];
+      }
+
+      if (!attributes || Object.keys(attributes).length === 0) {
+        delete op['attributes'];
+        newDelta.push({ ...op });
+      } else {
+        newDelta.push({ ...op, attributes });
+      }
+    });
+
+    return newDelta.chop();
   }
 
   transformPosition(index: number, priority = false): number {

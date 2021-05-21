@@ -278,6 +278,30 @@ describe('compose()', function () {
     expect(a.compose(b)).toEqual(expected);
   });
 
+  it('remove all detection attributes (like embeds) 2', function () {
+    const a = new Delta()
+      .insert(
+        { url: 'http://quilljs.com' },
+        {
+          italic: true,
+          detectionId: '21b9c1e8-d8f9-43ea-8f91-c3890e25a2aa',
+        },
+      )
+      .insert('k', {
+        italic: true,
+        detectionId: '21b9c1e8-d8f9-43ea-8f91-c3890e25a2aa',
+        color: 'red',
+      });
+    const b = new Delta().retain(1).retain(1, { detectionId: null });
+    const expected = new Delta()
+      .insert({ url: 'http://quilljs.com' }, { italic: true })
+      .insert('k', {
+        italic: true,
+        color: 'red',
+      });
+    expect(a.compose(b)).toEqual(expected);
+  });
+
   it('replace detectionId (clear detection)', function () {
     const a = new Delta().insert('AB', { detectionId: '123' });
     const b = new Delta().retain(1, { detectionId: '234' });
