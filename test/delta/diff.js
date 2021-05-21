@@ -157,4 +157,174 @@ describe('diff()', function() {
       a.diff(b);
     }).toThrow(new Error('diff() called on non-document'));
   });
+
+  it('asdasd', function() {
+    const initialDoc = new Delta([
+      { insert: 'm' },
+      {
+        insert: 'H',
+        attributes: {
+          italic: true,
+          detectionId: '609abe0d-8f37-4d7d-813a-a7b35ef60cc6',
+          color: 'red'
+        }
+      },
+      {
+        insert: 'e',
+        attributes: {
+          font: 'sans-serif',
+          italic: true,
+          detectionId: '609abe0d-8f37-4d7d-813a-a7b35ef60cc6'
+        }
+      },
+      {
+        insert: 'a',
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          bold: true,
+          detectionId: 'ee1c76bc-ecda-4fa3-8166-6cf5aac85104'
+        }
+      },
+      {
+        insert: 'n',
+        attributes: { italic: true, font: 'monospace', color: 'yellow' }
+      },
+      { insert: 'wood' },
+      { insert: 'to', attributes: { color: 'purple' } },
+      { insert: 2, attributes: { color: 'purple', font: 'serif' } },
+      { insert: { url: 'http://quilljs.com' } },
+      { insert: 'ves', attributes: { color: 'purple' } },
+      { insert: 'x', attributes: { color: 'yellow', bold: true } },
+      { insert: 't', attributes: { bold: true } },
+      { insert: 'snackhrtheough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' }
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: 'aa4f15f3-27a7-4ed5-8634-459f8442c1e0'
+        }
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' }
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true }
+      },
+      {
+        insert: 'Cal',
+        attributes: {
+          bold: true,
+          detectionId: '0119fa75-1136-4023-8ac3-69e932839181'
+        }
+      },
+      { insert: 'looh' }
+    ])
+
+    const resultDoc = new Delta([
+      { insert: 'm' },
+      {
+        insert: 'H',
+        attributes: {
+          italic: true,
+          detectionId: '609abe0d-8f37-4d7d-813a-a7b35ef60cc6',
+          color: 'red'
+        }
+      },
+      {
+        insert: 'e',
+        attributes: {
+          font: 'sans-serif',
+          italic: true,
+          detectionId: '609abe0d-8f37-4d7d-813a-a7b35ef60cc6'
+        }
+      },
+      { insert: 'Jueadbjub' },
+      {
+        insert: 1,
+        attributes: {
+          color: 'green',
+          bold: true,
+          italic: true,
+          detectionId: '03832101-1a22-4751-920d-713e188de4c8'
+        }
+      },
+      { insert: 'rested' },
+      {
+        insert: 2,
+        attributes: {
+          font: 'sans-serif',
+          italic: true,
+          detectionId: '97976429-abe8-4699-af34-84e1d258c46e'
+        }
+      },
+      {
+        insert: 'a',
+        attributes: {
+          italic: true,
+          font: 'monospace',
+          color: 'yellow',
+          bold: true,
+          detectionId: 'ee1c76bc-ecda-4fa3-8166-6cf5aac85104'
+        }
+      },
+      { insert: 'wood' },
+      { insert: 'to', attributes: { color: 'purple' } },
+      { insert: 2, attributes: { color: 'purple', font: 'serif' } },
+      { insert: { url: 'http://quilljs.com' } },
+      { insert: 'ves', attributes: { color: 'purple' } },
+      { insert: 'x', attributes: { color: 'yellow', bold: true } },
+      { insert: 't', attributes: { bold: true } },
+      { insert: 'snackhrtheough' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'yellow' }
+      },
+      { insert: 'g' },
+      {
+        insert: 'to',
+        attributes: {
+          color: 'yellow',
+          font: 'monospace',
+          bold: true,
+          detectionId: 'aa4f15f3-27a7-4ed5-8634-459f8442c1e0'
+        }
+      },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red' }
+      },
+      { insert: 'imble' },
+      { insert: 'e', attributes: { italic: true } },
+      { insert: 'as' },
+      {
+        insert: { image: 'http://quilljs.com' },
+        attributes: { color: 'red', bold: true }
+      },
+      {
+        insert: 'Cal',
+        attributes: {
+          bold: true,
+          detectionId: '0119fa75-1136-4023-8ac3-69e932839181'
+        }
+      },
+      { insert: 'looh' }
+    ])
+
+    const diff = initialDoc.diff(resultDoc)
+    const actual = initialDoc.compose(diff)
+  })
 });

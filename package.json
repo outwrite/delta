@@ -21,6 +21,7 @@
     "eslint-plugin-prettier": "^3.1.2",
     "istanbul": "~0.4.5",
     "jasmine": "^3.5.0",
+    "lodash.partition": "^4.6.0",
     "prettier": "^2.0.4",
     "typescript": "^3.8.3"
   },
@@ -34,7 +35,7 @@
     "build": "tsc",
     "prepare": "npm run build",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "npm run build; jasmine test/*.js test/**/*.js",
+    "test": "npm run build & jasmine test/*.js test/**/*.js",
     "test:coverage": "istanbul cover jasmine test/*.js test/**/*.js",
     "test:coverage:report": "cat coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js"
   },
